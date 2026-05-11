@@ -290,8 +290,8 @@ while IFS= read -r sub; do
             *" api "*)
               # gh api is read-mostly, but -X POST/PUT/PATCH/DELETE / --method <write>
               # is a write op. Only allow read methods (GET, HEAD, default).
-              if [[ "$args" =~ (-X|--method)[[:space:]]+([A-Z]+) ]]; then
-                method="${BASH_REMATCH[2]}"
+              if [[ "$args" =~ (-X[[:space:]]*=?[[:space:]]*|--method[[:space:]]*=?[[:space:]]*)([A-Za-z]+) ]]; then
+                method="${BASH_REMATCH[2]^^}"  # uppercase regardless of input form
                 case "$method" in
                   GET|HEAD) : ;;
                   *) emit_block "gh api --method/-X $method against $target is a write op; blocked." "$sub" ;;
@@ -323,8 +323,10 @@ while IFS= read -r sub; do
             emit_block "gh gist write op forbidden (gists are public unless --secret; agent should not post)." "$sub" ;;
         esac
         # gh api -X POST/PUT/PATCH/DELETE against ANY endpoint (no --repo flag).
-        if [[ "$args" =~ " api " ]] && [[ "$args" =~ (-X|--method)[[:space:]]+([A-Z]+) ]]; then
-          method="${BASH_REMATCH[2]}"
+        # Regex accepts: `-X POST`, `-XPOST`, `-X=POST`, `--method POST`, `--method=POST`,
+        # `--method=post` (lowercase) — uppercase before comparison.
+        if [[ "$args" =~ " api " ]] && [[ "$args" =~ (-X[[:space:]]*=?[[:space:]]*|--method[[:space:]]*=?[[:space:]]*)([A-Za-z]+) ]]; then
+          method="${BASH_REMATCH[2]^^}"
           case "$method" in
             GET|HEAD) : ;;
             *) emit_block "gh api --method/-X $method is a write op (any endpoint); blocked. Surface via PENDING instead." "$sub" ;;

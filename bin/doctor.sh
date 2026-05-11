@@ -8,7 +8,8 @@
 # Exit 0 = all green (or only neutral items missing).
 # Exit 1 = critical red (cron not safe to fire).
 
-set -u
+set -uo pipefail
+trap 'printf "${RED:-}ERROR${NC:-} doctor.sh crashed at line %s — treat as red\n" "$LINENO" >&2; exit 1' ERR
 
 WORKSPACE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$WORKSPACE" || exit 1
@@ -133,6 +134,48 @@ if bash tests/hooks/run-all.sh >/dev/null 2>&1; then
   emit_pass "hook test harness"     "all tests pass"
 else
   emit_fail "hook test harness"     "FAILING — run: bash tests/hooks/run-all.sh"
+fi
+
+# 11. Halt switch (if present, the cron entry exits immediately)
+if [[ -f state/.halt ]]; then
+  reason="$(head -1 state/.halt 2>/dev/null | tr -d '\n' | cut -c1-50)"
+  emit_warn "halt switch"           "ACTIVE — ${reason:-no reason given}; rm state/.halt to resume"
+fi
+
+# 12. Hook + settings drift vs committed HEAD (pairs with C-PROD-1)
+drift=""
+for f in .claude/settings.json \
+         .claude/hooks/block-upstream-actions.sh \
+         .claude/hooks/block-credential-leak.sh \
+         .claude/hooks/block-self-modify.sh \
+         .claude/hooks/scrub-env.sh; do
+  if [[ ! -f "$f" ]]; then
+    drift+="${f} (missing); "
+    continue
+  fi
+  if ! git diff --quiet HEAD -- "$f" 2>/dev/null; then
+    drift+="${f} (modified locally); "
+  fi
+done
+if [[ -z "$drift" ]]; then
+  emit_pass "hook drift"            "all .claude/ files match committed HEAD"
+else
+  emit_fail "hook drift"            "${drift%; }"
+fi
+
+# 13. Submodule pins match superproject
+pin_drift=""
+while read -r mode sha _ path; do
+  [[ -z "$path" ]] && continue
+  actual="$(git -C "$path" rev-parse HEAD 2>/dev/null || echo '?')"
+  if [[ "$sha" != "$actual" ]]; then
+    pin_drift+="${path}: pinned=${sha:0:10} actual=${actual:0:10}; "
+  fi
+done < <(git ls-tree HEAD 2>/dev/null | awk '$2=="commit"')
+if [[ -z "$pin_drift" ]]; then
+  emit_pass "submodule pins"        "all at pinned SHA"
+else
+  emit_fail "submodule pins"        "${pin_drift%; }"
 fi
 
 echo ""

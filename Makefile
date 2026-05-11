@@ -35,15 +35,23 @@ uninstall: ## Remove cron entry — leaves workspace + state intact
 # ---------------------------------------------------------------------------
 
 .PHONY: pull-all
-pull-all: ## git submodule update --remote --recursive
+pull-all: ## Check out submodules at the PINNED SHAs (NOT branch HEAD — see submodule-bump for that)
+	@git submodule update --init --recursive
+
+.PHONY: submodule-bump
+submodule-bump: ## DELIBERATE: pull each submodule's tracked-branch HEAD. Review the diff before committing.
+	@echo "WARNING: this pulls upstream HEAD of every submodule. Inspect 'git diff' before committing."
 	@git submodule update --init --remote --recursive
+	@echo ""
+	@echo "Pin diffs (commit these to lock in the new SHAs):"
+	@git diff --submodule=log -- projects/
 
 .PHONY: status-all
 status-all: ## Per-submodule git status one-liner + workspace status
 	@bash bin/status-all.sh
 
 .PHONY: sync-projects
-sync-projects: pull-all ## Pull all submodules and commit a pin bump if anything moved
+sync-projects: ## Verify on-disk submodule SHAs match the workspace pin (no --remote pull)
 	@bash bin/sync-projects.sh
 
 # ---------------------------------------------------------------------------

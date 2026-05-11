@@ -95,6 +95,12 @@
         "hooks": [
           {"type": "command", "command": "bash .claude/hooks/block-credential-leak.sh", "timeout": 2}
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {"type": "command", "command": "bash .claude/hooks/block-self-modify.sh", "timeout": 2}
+        ]
       }
     ],
     "SessionStart": [

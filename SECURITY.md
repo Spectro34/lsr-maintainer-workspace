@@ -78,8 +78,12 @@ Hook-block events also append to `~/.cache/lsr-maintainer/security.log` with the
 
 | To revoke | Run |
 |---|---|
-| Stop scheduled runs | `make uninstall` (removes cron, keeps workspace + state) |
+| **Halt-in-flight** (cron stays scheduled but every fire exits immediately) | `touch state/.halt` — optional: write a note inside explaining why |
+| Resume after halt | `rm state/.halt` |
+| Stop scheduled runs (remove cron) | `make uninstall` (removes cron, keeps workspace + state) |
 | Revoke GitHub access | `gh auth logout` (independent of this workspace) |
 | Revoke OBS access | edit `~/.config/osc/oscrc` (independent of this workspace) |
 | Nuke local state | `make distclean` (state, worktrees, tox venv — keeps source) |
 | Full uninstall | `make uninstall && rm -rf ~/path/to/lsr-maintainer-workspace` |
+
+**Recommended halt flow when something feels wrong**: `touch state/.halt && echo "investigating $(date -Iseconds)" > state/.halt`. This makes the next cron tick exit without spawning `claude` while preserving all logs/state for forensics. Examine `~/.cache/lsr-maintainer/security.log` for blocked actions; resume only after the cause is understood.

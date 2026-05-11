@@ -17,6 +17,17 @@ SUMMARY="$LOG_DIR/${ts}.txt"
 
 cd "$WORKSPACE" || exit 1
 
+# Kill switch — operator can halt scheduled runs without removing the cron
+# entry by `touch state/.halt`. Resume with `rm state/.halt`.
+if [[ -f state/.halt ]]; then
+  {
+    echo "lsr-maintainer run @ $(date -Iseconds) — HALTED (state/.halt present)"
+    echo "Resume with: rm state/.halt"
+    cat state/.halt 2>/dev/null  # admins can leave a note explaining why
+  } > "$SUMMARY"
+  exit 0
+fi
+
 # Find claude binary.
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude || echo /usr/local/bin/claude)}"
 if [[ ! -x "$CLAUDE_BIN" ]]; then

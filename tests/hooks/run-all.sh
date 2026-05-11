@@ -8,6 +8,7 @@ WORKSPACE="$(cd "$(dirname "$0")/../.." && pwd)"
 UPSTREAM="$WORKSPACE/.claude/hooks/block-upstream-actions.sh"
 CRED="$WORKSPACE/.claude/hooks/block-credential-leak.sh"
 ENV_SCRUB="$WORKSPACE/.claude/hooks/scrub-env.sh"
+SELFMOD="$WORKSPACE/.claude/hooks/block-self-modify.sh"
 
 # Synthesize a test config so the existing tests (which assume a known
 # identity) work regardless of what state/config.json says on the host.
@@ -449,6 +450,64 @@ for entry in "${ALT_DENY[@]}"; do
   check "DENY  $desc" "2" "$code"
 done
 rm -f "$ALT_CONFIG"
+
+# ---- C-PROD-1: block-self-modify.sh — Write/Edit against hooks/settings/config ----
+echo "== C-PROD-1: block-self-modify on Write/Edit =="
+
+SELFMOD_DENY=(
+  '{"tool_name":"Write","tool_input":{"file_path":"'"$WORKSPACE"'/.claude/hooks/block-upstream-actions.sh","content":"x"}}|Write to upstream hook'
+  '{"tool_name":"Edit","tool_input":{"file_path":"'"$WORKSPACE"'/.claude/settings.json","old_string":"a","new_string":"b"}}|Edit to settings.json'
+  '{"tool_name":"Edit","tool_input":{"file_path":"'"$WORKSPACE"'/state/config.json","old_string":"a","new_string":"b"}}|Edit to state/config.json'
+  '{"tool_name":"Write","tool_input":{"file_path":"'"$WORKSPACE"'/.gitmodules","content":"x"}}|Write to .gitmodules'
+  '{"tool_name":"Write","tool_input":{"file_path":"'"$WORKSPACE"'/.mcp.json","content":"x"}}|Write to .mcp.json'
+  '{"tool_name":"Write","tool_input":{"file_path":"'"$WORKSPACE"'/bin/lsr-maintainer-run.sh","content":"x"}}|Write to bin/'
+  '{"tool_name":"Write","tool_input":{"file_path":"'"$WORKSPACE"'/tests/hooks/run-all.sh","content":"x"}}|Write to tests/hooks/'
+  '{"tool_name":"Write","tool_input":{"file_path":"'"$WORKSPACE"'/orchestrator/config.py","content":"x"}}|Write to orchestrator/'
+  '{"tool_name":"Write","tool_input":{"file_path":"/home/spectro/.bashrc","content":"x"}}|Write to ~/.bashrc'
+  '{"tool_name":"Write","tool_input":{"file_path":"/home/spectro/.ssh/id_test","content":"x"}}|Write to ssh key path'
+  '{"tool_name":"Write","tool_input":{"file_path":"/etc/cron.d/evil","content":"x"}}|Write to /etc/cron.d/'
+  '{"tool_name":"Edit","tool_input":{"file_path":"/home/spectro/.config/osc/oscrc","old_string":"a","new_string":"b"}}|Edit to oscrc'
+  '{"tool_name":"Edit","tool_input":{"file_path":"/home/spectro/.claude/settings.json","old_string":"a","new_string":"b"}}|Edit to user-global Claude settings'
+  '{"tool_name":"NotebookEdit","tool_input":{"notebook_path":"'"$WORKSPACE"'/.claude/skills/lsr-maintainer/SKILL.md","new_source":"x"}}|NotebookEdit SKILL.md'
+)
+for entry in "${SELFMOD_DENY[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$SELFMOD" "$json")
+  check "DENY  $desc" "2" "$code"
+done
+
+# Allow: state/ runtime artefacts (PENDING_REVIEW, state.json, run.pid, cache, worktrees)
+# and arbitrary paths OUTSIDE the workspace (worktree fork branches, etc.)
+SELFMOD_ALLOW=(
+  '{"tool_name":"Write","tool_input":{"file_path":"'"$WORKSPACE"'/state/PENDING_REVIEW.md","content":"x"}}|Write PENDING_REVIEW.md'
+  '{"tool_name":"Write","tool_input":{"file_path":"'"$WORKSPACE"'/state/.lsr-maintainer-state.json","content":"x"}}|Write state file'
+  '{"tool_name":"Write","tool_input":{"file_path":"'"$WORKSPACE"'/state/.run.pid","content":"x"}}|Write pidfile'
+  '{"tool_name":"Write","tool_input":{"file_path":"'"$WORKSPACE"'/state/worktrees/sudo/library/scan_sudoers.py","content":"x"}}|Write to a worktree'
+  '{"tool_name":"Write","tool_input":{"file_path":"/tmp/somefile","content":"x"}}|Write to /tmp/'
+  '{"tool_name":"Write","tool_input":{"file_path":"/home/spectro/github/linux-system-roles/sudo/library/scan_sudoers.py","content":"x"}}|Write to fork checkout'
+  '{"tool_name":"Bash","tool_input":{"command":"echo hi"}}|non-Write/Edit ignored'
+  '{"tool_name":"Read","tool_input":{"file_path":"'"$WORKSPACE"'/.claude/settings.json"}}|Read settings.json (selfmod ignores Read)'
+)
+for entry in "${SELFMOD_ALLOW[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$SELFMOD" "$json")
+  check "ALLOW $desc" "0" "$code"
+done
+
+# ---- C-PROD-3: gh api -X with lowercase / = forms ----
+echo "== C-PROD-3: gh api -X lowercase/= forms =="
+GHAPI_FORM_DENY=(
+  '{"tool_name":"Bash","tool_input":{"command":"gh api -Xpost /repos/foo/bar/issues"}}|gh api -Xpost (no space, lower)'
+  '{"tool_name":"Bash","tool_input":{"command":"gh api -X=POST /repos/foo/bar"}}|gh api -X=POST'
+  '{"tool_name":"Bash","tool_input":{"command":"gh api --method=POST /repos/foo/bar"}}|gh api --method=POST'
+  '{"tool_name":"Bash","tool_input":{"command":"gh api --method=post /repos/foo/bar"}}|gh api --method=post (lower)'
+  '{"tool_name":"Bash","tool_input":{"command":"gh api --repo Foo/bar repos/foo/bar/issues -Xpatch"}}|gh api -Xpatch with --repo'
+)
+for entry in "${GHAPI_FORM_DENY[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "DENY  $desc" "2" "$code"
+done
 
 # ---------------------------------------------------------------- summary
 echo ""
