@@ -2,6 +2,18 @@
 
 One-time prerequisites for a new machine. The interactive `./bin/setup.sh` walks you through these; this doc is the reference.
 
+## 0. `lsr-agent` dependency
+
+`projects/lsr-agent/` is a symlink to `../../rnd/lsr-agent/` — the deep LSR knowledge skill currently lives inside the `skill-lifecycle-framework` repo. Until that subdir is carved out into its own GitHub repo (tracked in `projects/README.md`), clone the framework repo as a sibling first:
+
+```bash
+mkdir -p ~/github/rnd && cd ~/github/rnd
+git clone https://github.com/<your-fork>/skill-lifecycle-framework
+# this creates ~/github/rnd/lsr-agent/ which the workspace symlinks to
+```
+
+`./bin/install-deps.sh` will FAIL fast (not just warn) if the symlink dangles.
+
 ## 1. System packages
 
 The agent uses these CLIs from the host system. Install whatever's missing:

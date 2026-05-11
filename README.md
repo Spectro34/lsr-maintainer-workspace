@@ -4,7 +4,12 @@ A scheduled, autonomous Claude Code agent that maintains your **Linux System Rol
 
 **Identity-agnostic.** No GitHub username or OBS user is hardcoded. Fork this workspace, run `./bin/setup.sh`, and it operates under YOUR detected `gh api user` / `osc whois` identity. The detected values land in `state/config.json` (gitignored); hooks and sub-agents read that file at runtime. Pre-init, all writes are blocked — uninitialized workspaces are safer than misconfigured ones.
 
-This workspace pulls together everything needed to run the agent end-to-end on any machine: the orchestrator skill, deterministic security hooks, setup scripts, and the dependent projects (`lsr-agent` knowledge skill, `obs-package-skill`, `osc-mcp` MCP server) as **git submodules** so they stay independently versioned but get managed from one place.
+This workspace pulls together everything needed to run the agent end-to-end on any machine: the orchestrator skill, deterministic security hooks, setup scripts, and the dependent projects.
+
+**Dependent projects:**
+- `projects/obs-package-skill/` — git submodule (autonomous OBS package maintenance skill)
+- `projects/osc-mcp/` — git submodule (osc MCP server)
+- `projects/lsr-agent/` — **symlink** to `../../rnd/lsr-agent/` (deep LSR knowledge skill). This subdir currently lives inside the `skill-lifecycle-framework` repo, so a fresh clone of this workspace requires that repo to be cloned as a sibling at `~/github/rnd/`. Carve-out to its own submodule is a tracked TODO in [projects/README.md](projects/README.md). `./bin/install-deps.sh` fails immediately if the symlink dangles.
 
 ## What it does
 
@@ -27,11 +32,16 @@ See [SECURITY.md](SECURITY.md) for the full threat model and hook semantics.
 ## Quickstart (new machine)
 
 ```bash
-git clone --recurse-submodules <workspace-url> lsr-maintainer-workspace
+# 0. lsr-agent dependency (until it's carved out into its own repo).
+mkdir -p ~/github/rnd && cd ~/github/rnd
+git clone <skill-lifecycle-framework-fork-url>  # provides ~/github/rnd/lsr-agent/
+
+# 1. The workspace itself
+cd ~/github && git clone --recurse-submodules <workspace-url> lsr-maintainer-workspace
 cd lsr-maintainer-workspace
 ./bin/setup.sh                      # interactive — you authenticate gh and osc yourself
 make install                         # idempotent host prep + cron install
-claude -p "/lsr-maintainer doctor"   # green/red posture check
+bash bin/doctor.sh                   # fast green/red posture check (no claude -p)
 make dry-run                         # see what tonight would do, change nothing
 ```
 

@@ -10,7 +10,7 @@ Read-only sub-agent. Polls open PRs on the user's forks, diffs against per-PR cu
 
 ## Workflow
 
-1. For each role in state.obs.managed_roles + hackweek roles list, fetch `gh pr list --author "${github_user}" --state open --search "head:${github_user}" --json url,number,headRepository,baseRepository,headRefName`. Note this is the user's forks pushing to upstream — the PRs the user actually opens.
+1. Compute the watched-role set: `union(state.obs.managed_roles[].name, state/config.json::github.tracked_extra_roles)`. The first is the OBS-shipped manifest (manifest-syncer populates it); the second is the user-configured list of fork-only roles (e.g. sudo, kernel_settings, ansible-sshd, network, logging, metrics, plus hackweek community roles). For each role in this set, fetch `gh pr list --author "${github_user}" --state open --search "head:${github_user}" --json url,number,headRepository,baseRepository,headRefName`. Note this is the user's forks pushing to upstream — the PRs the user actually opens.
 2. Also fetch PRs they've authored: `gh pr list --author "@me" --state open --json url,number,...`. Dedup.
 3. For each open PR:
    - `gh pr view <num> --repo <base-repo> --json comments,reviews,reviewDecision,statusCheckRollup,latestReviews`

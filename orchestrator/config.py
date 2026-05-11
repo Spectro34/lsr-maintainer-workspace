@@ -38,6 +38,17 @@ def default_config() -> dict[str, Any]:
                 "mrlesmithjr",
             ],
             "suse_org": "SUSE",
+            # Roles the user maintains on personal forks that AREN'T in the OBS
+            # package manifest (fork-only roles, e.g. sudo, kernel_settings,
+            # ansible-sshd, network, logging, metrics, plus hackweek community
+            # roles like squid/apache/nfs/samba/kea-dhcp/bind/snapper/tftpd).
+            # pr-status-poller and upstream-drift-watcher iterate over the union
+            # of obs.managed_roles + tracked_extra_roles. Edit this list to
+            # add/remove what the agent should watch beyond the OBS manifest.
+            "tracked_extra_roles": [
+                "sudo", "kernel_settings", "ansible-sshd", "network", "logging",
+                "metrics", "postgresql", "ad_integration",
+            ],
         },
         "obs": {
             "user": "",                          # detected from `osc whois`

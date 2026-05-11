@@ -42,12 +42,19 @@ if [[ -f .gitmodules ]] && [[ -d .git ]]; then
   fi
 fi
 
-# --- 3. lsr-agent symlink target check ---
+# --- 3. lsr-agent symlink target check (HARD FAIL on dangling — see SETUP.md §0) ---
 if [[ -L projects/lsr-agent ]]; then
   if [[ -d projects/lsr-agent/.claude/skills/lsr-agent ]]; then
     ok "lsr-agent symlink resolves"
   else
-    warn "projects/lsr-agent symlink points at missing target — see projects/README.md"
+    target="$(readlink projects/lsr-agent)"
+    err "projects/lsr-agent symlink dangles (target: $target)"
+    err "This means the lsr-agent dependency is missing on this host."
+    err "Fix: clone skill-lifecycle-framework as documented in SETUP.md §0:"
+    err "    mkdir -p ~/github/rnd && cd ~/github/rnd"
+    err "    git clone https://github.com/<your-fork>/skill-lifecycle-framework"
+    err "Then re-run: make install"
+    exit 1
   fi
 fi
 

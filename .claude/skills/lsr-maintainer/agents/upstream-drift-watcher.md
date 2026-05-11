@@ -11,7 +11,7 @@ Read-only sub-agent. Detects new commits on upstream main for each managed role 
 
 ## Workflow
 
-For each role in scope:
+Role scope: every role in `state.roles` (the orchestrator pre-seeds these from `state.obs.managed_roles` ∪ `state/config.json::github.tracked_extra_roles` via `seed_roles_from_manifest`). For each role in scope:
 
 1. `git ls-remote https://github.com/linux-system-roles/<role>.git refs/heads/<branch>` to get the upstream HEAD SHA without cloning.
 2. If equal to `last_seen_upstream_sha`, no drift — skip.

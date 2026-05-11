@@ -51,7 +51,11 @@ sync-projects: pull-all ## Pull all submodules and commit a pin bump if anything
 # ---------------------------------------------------------------------------
 
 .PHONY: doctor
-doctor: ## Green/red posture check (read-only, no install)
+doctor: ## Fast static posture check (bash, no claude -p)
+	@bash bin/doctor.sh
+
+.PHONY: doctor-llm
+doctor-llm: ## LLM-driven posture check (slower, more verbose narrative)
 	@claude -p "/lsr-maintainer doctor"
 
 .PHONY: run
@@ -88,10 +92,18 @@ test-hooks: ## Unit-test security hooks against synthetic inputs (must pass befo
 	@bash tests/hooks/run-all.sh
 
 .PHONY: test-orchestrator
-test-orchestrator: ## Smoke-test orchestrator Python modules
-	@if [ -d orchestrator ] && ls orchestrator/*.py >/dev/null 2>&1; then \
-	  cd orchestrator && python3 -m pytest -q || true; \
-	else echo "No orchestrator tests yet — skipping."; fi
+test-orchestrator: ## Run orchestrator Python self-tests (config + state + manifest)
+	@echo "== orchestrator/config self-test =="
+	@python3 -m orchestrator.config
+	@echo "== orchestrator/state_schema self-test =="
+	@python3 -m orchestrator.state_schema
+	@echo "== orchestrator/manifest_parse smoke (requires real spec) =="
+	@spec=$$(find $$HOME/github/ansible -name 'ansible-linux-system-roles.spec' 2>/dev/null | head -1); \
+	if [ -n "$$spec" ]; then \
+	  python3 orchestrator/manifest_parse.py "$$spec" >/dev/null && echo "OK manifest parse ($$spec)"; \
+	else \
+	  echo "SKIP manifest parse (no spec file on this host — first 'osc co' will fetch it)"; \
+	fi
 
 .PHONY: test-all
 test-all: test ## Alias: run workspace tests AND per-project tests

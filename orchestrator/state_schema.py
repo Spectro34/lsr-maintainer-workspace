@@ -98,19 +98,34 @@ def seed_roles_from_manifest(
     managed_roles: list[dict[str, Any]],
     github_user: str = "",
     fork_branch: str = "fix/suse-support",
+    tracked_extra_roles: list[str] | None = None,
 ) -> int:
-    """Ensure every role in managed_roles[] has a per-role entry in state.roles.
-    Returns the number of NEW entries created (not updates).
+    """Ensure every role in managed_roles[] and tracked_extra_roles has a
+    per-role entry in state.roles. Returns the number of NEW entries created.
 
     Called by the orchestrator after manifest-syncer returns. The orchestrator
-    reads github_user and fork_branch from state/config.json (via
-    orchestrator.config.load_config) and passes them here.
+    reads github_user, fork_branch, and tracked_extra_roles from
+    state/config.json (via orchestrator.config.load_config) and passes them
+    here.
 
-    Existing entries are preserved; only missing fields are filled in from
-    default_role_entry().
+    `managed_roles` come from the OBS spec (with version + sle16_only metadata).
+    `tracked_extra_roles` are bare role names — fork-only roles the user
+    maintains beyond what the OBS package ships (sudo, kernel_settings,
+    ansible-sshd, network, logging, metrics, plus community/hackweek roles).
+    These get default_role_entry() with version=None, sle16_only=False.
+
+    Existing entries are preserved; only missing fields are filled in.
     """
     created = 0
-    for r in managed_roles:
+    # Build the combined list, manifest roles first (they have metadata).
+    combined = list(managed_roles)
+    seen_names = {r.get("name") for r in combined if r.get("name")}
+    for name in (tracked_extra_roles or []):
+        if name and name not in seen_names:
+            combined.append({"name": name, "version": None, "sle16_only": False})
+            seen_names.add(name)
+
+    for r in combined:
         name = r.get("name")
         if not name:
             continue
@@ -290,6 +305,23 @@ if __name__ == "__main__":
     assert s3["roles"]["sudo"]["fork_repo"] == "bob/sudo", "fork_repo must follow identity change"
     assert s3["roles"]["sudo"]["pr_cursors"] == {}, "PR cursors must reset on identity change"
     assert s3["roles"]["sudo"]["patched_files"] == ["library/scan_sudoers.py"], "patched_files preserved"
+
+    # tracked_extra_roles: roles not in the OBS manifest get seeded too.
+    s4 = default_state()
+    seed_roles_from_manifest(
+        s4, manifest, github_user="alice",
+        tracked_extra_roles=["kernel_settings", "ansible-sshd"],
+    )
+    # Manifest roles get manifest metadata.
+    assert "sudo" in s4["roles"]
+    assert s4["roles"]["sudo"]["version"] == "1.5.2"
+    assert s4["roles"]["certificate"]["sle16_only"] is True
+    # tracked_extra_roles get default metadata (no version).
+    assert "kernel_settings" in s4["roles"], "tracked_extra_roles must seed bare names"
+    assert s4["roles"]["kernel_settings"]["version"] is None
+    assert s4["roles"]["kernel_settings"]["sle16_only"] is False
+    assert s4["roles"]["kernel_settings"]["fork_repo"] == "alice/kernel_settings"
+    assert "ansible-sshd" in s4["roles"]
 
     # state_lock concurrency: second acquisition with short timeout must fail.
     lockp = os.path.join(tmpdir, "concurrent.json")
