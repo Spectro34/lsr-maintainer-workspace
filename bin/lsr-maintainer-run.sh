@@ -58,11 +58,20 @@ fi
   > "$TRANSCRIPT" 2>"$LOG_DIR/${ts}.stderr" || rc=$?
 
 rc="${rc:-0}"
+
+# Cost meter (issue #19): parse the transcript for token usage and append
+# to state/cost-history.jsonl. Fail-silent if the meter itself errors.
+COST_LINE=""
+if [[ -s "$TRANSCRIPT" ]] && command -v python3 >/dev/null; then
+  COST_LINE="$(cd "$WORKSPACE" && python3 -m orchestrator.cost_meter "$TRANSCRIPT" state/cost-history.jsonl 2>/dev/null || true)"
+fi
+
 # Brief summary alongside the full transcript.
 {
   echo "lsr-maintainer run @ $(date -Iseconds)"
   echo "transcript: $TRANSCRIPT"
   echo "exit code:  $rc"
+  [[ -n "$COST_LINE" ]] && echo "cost:       $COST_LINE"
   if [[ -f "$WORKSPACE/state/PENDING_REVIEW.md" ]]; then
     echo ""
     echo "--- PENDING_REVIEW.md head ---"

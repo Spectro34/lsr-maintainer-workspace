@@ -40,7 +40,15 @@ emit_block() {
   local reason="$1"
   local input="${2:-<unknown>}"
   printf '{"decision":"deny","reason":%s}\n' "$(printf '%s' "$reason" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')"
-  echo "[$(date -Iseconds)] BLOCK: $reason :: cmd=$input" >> "$SECURITY_LOG"
+  local ts log_line
+  ts="$(date -Iseconds)"
+  log_line="[$ts] BLOCK: $reason :: cmd=$input"
+  echo "$log_line" >> "$SECURITY_LOG"
+  # Mirror to journald (issue #16) so even if the local log is wiped, the
+  # journal entry survives. Best-effort — silent if systemd-cat absent.
+  if command -v systemd-cat >/dev/null 2>&1; then
+    echo "$log_line" | systemd-cat -t lsr-maintainer-security -p warning 2>/dev/null || true
+  fi
   exit 2
 }
 

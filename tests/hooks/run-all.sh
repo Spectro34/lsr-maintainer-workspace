@@ -469,6 +469,8 @@ SELFMOD_DENY=(
   '{"tool_name":"Edit","tool_input":{"file_path":"/home/spectro/.config/osc/oscrc","old_string":"a","new_string":"b"}}|Edit to oscrc'
   '{"tool_name":"Edit","tool_input":{"file_path":"/home/spectro/.claude/settings.json","old_string":"a","new_string":"b"}}|Edit to user-global Claude settings'
   '{"tool_name":"NotebookEdit","tool_input":{"notebook_path":"'"$WORKSPACE"'/.claude/skills/lsr-maintainer/SKILL.md","new_source":"x"}}|NotebookEdit SKILL.md'
+  '{"tool_name":"Write","tool_input":{"file_path":"/home/spectro/.cache/lsr-maintainer/security.log","content":""}}|#16 Write to audit log forbidden'
+  '{"tool_name":"Edit","tool_input":{"file_path":"/home/spectro/.cache/lsr-maintainer/20260512T030700.jsonl","old_string":"a","new_string":""}}|#16 Edit transcript forbidden'
 )
 for entry in "${SELFMOD_DENY[@]}"; do
   desc="${entry##*|}"; json="${entry%|*}"

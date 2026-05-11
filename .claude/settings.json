@@ -87,7 +87,9 @@
         "matcher": "Bash",
         "hooks": [
           {"type": "command", "command": "bash .claude/hooks/block-upstream-actions.sh", "timeout": 3},
-          {"type": "command", "command": "bash .claude/hooks/block-credential-leak.sh", "timeout": 2}
+          {"type": "command", "command": "bash .claude/hooks/block-credential-leak.sh", "timeout": 2},
+          {"type": "command", "command": "test -f projects/obs-package-skill/hooks/block-osc-sr.sh && bash projects/obs-package-skill/hooks/block-osc-sr.sh", "timeout": 2},
+          {"type": "command", "command": "test -f projects/obs-package-skill/hooks/block-secrets.sh && bash projects/obs-package-skill/hooks/block-secrets.sh", "timeout": 2}
         ]
       },
       {

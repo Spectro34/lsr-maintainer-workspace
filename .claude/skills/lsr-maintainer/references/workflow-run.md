@@ -8,7 +8,15 @@ This is the full nightly autonomous workflow. The orchestrator (SKILL.md) loads 
 - `.claude/settings.json` loaded → security hooks active
 - `state/` exists (created by `make install-deps`)
 
-## Phase 0 — Acquire run lock (pidfile)
+## Phase 0 — Acquire run lock (pidfile + state_lock)
+
+Two layers of mutual exclusion (issue #20):
+
+**Layer 1 (cheap, short window): pidfile.** Detects most cron-vs-manual collisions before any state mutation.
+
+**Layer 2 (atomic, full run): `state_lock` held from Phase 0 through Phase 5.** Closes the race where two processes pass the pidfile check in the same scheduler tick. The lock is an `fcntl.LOCK_EX` advisory lock; a second runner times out after 30s and exits cleanly.
+
+Acquire pidfile + state_lock in this order:
 
 To prevent cron-vs-manual collisions, use a pidfile pattern that survives across the orchestrator's individual Bash tool calls (which run in separate shell processes — an `flock -n 9 ... 9>file` pattern would not survive).
 
@@ -55,6 +63,30 @@ if [ -f "$PIDFILE" ]; then
   fi
 fi
 ```
+
+Then enter `state_lock` for the rest of the run:
+
+```python
+from orchestrator.state_schema import state_lock, load_state, save_state
+
+STATE_PATH = "state/.lsr-maintainer-state.json"
+try:
+    with state_lock(STATE_PATH, timeout_sec=30.0):
+        state = load_state(STATE_PATH)
+        # ... ENTIRE run happens inside the lock, through Phase 5 ...
+        run_phase_1_preflight(state)
+        run_phase_2_queue_refresh(state)
+        run_phase_3_execute(state)
+        run_phase_4_surface(state)
+        # Phase 5 saves + clears pidfile (see below).
+        save_state(STATE_PATH, state)
+except TimeoutError:
+    # A concurrent run holds the lock — exit cleanly. Cron retries next slot.
+    print("CONCURRENT_RUN — state lock held; exiting cleanly")
+    sys.exit(0)
+```
+
+Holding the lock through long phases (60-min new-role enablement, 30-min tox) is the desired behavior: a manual `make run` while cron is running will TimeoutError after 30s. Only one run at a time.
 
 ## Phase 1 — Pre-flight (doctor)
 

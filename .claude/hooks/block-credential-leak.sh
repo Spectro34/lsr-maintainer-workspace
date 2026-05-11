@@ -33,7 +33,13 @@ emit_block() {
   local reason="$1"
   local cmd="${2:-<read>}"
   printf '{"decision":"deny","reason":%s}\n' "$(printf '%s' "$reason" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')"
-  echo "[$(date -Iseconds)] CRED-BLOCK: $reason :: $cmd" >> "$SECURITY_LOG"
+  local ts log_line
+  ts="$(date -Iseconds)"
+  log_line="[$ts] CRED-BLOCK: $reason :: $cmd"
+  echo "$log_line" >> "$SECURITY_LOG"
+  if command -v systemd-cat >/dev/null 2>&1; then
+    echo "$log_line" | systemd-cat -t lsr-maintainer-security -p warning 2>/dev/null || true
+  fi
   exit 2
 }
 

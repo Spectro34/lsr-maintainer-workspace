@@ -30,7 +30,13 @@ emit_block() {
   local path="${2:-<unknown>}"
   printf '{"decision":"deny","reason":%s}\n' \
     "$(printf '%s' "$reason" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')"
-  echo "[$(date -Iseconds)] SELFMOD-BLOCK: $reason :: $path" >> "$SECURITY_LOG"
+  local ts log_line
+  ts="$(date -Iseconds)"
+  log_line="[$ts] SELFMOD-BLOCK: $reason :: $path"
+  echo "$log_line" >> "$SECURITY_LOG"
+  if command -v systemd-cat >/dev/null 2>&1; then
+    echo "$log_line" | systemd-cat -t lsr-maintainer-security -p warning 2>/dev/null || true
+  fi
   exit 2
 }
 
@@ -103,6 +109,11 @@ case "$real" in
     emit_block "$tool against credential path $real is forbidden." "$real" ;;
   "$HOME"/.claude/hooks/*|"$HOME"/.claude/settings*.json)
     emit_block "$tool against user-global Claude hook/settings is forbidden." "$real" ;;
+  # Audit log + transcripts (issue #16): the agent must not be able to
+  # truncate or rewrite the very logs that record what it did. Hooks append
+  # in append-mode; this PreToolUse block prevents Write/Edit from racing.
+  "$HOME"/.cache/lsr-maintainer/*)
+    emit_block "$tool against audit/transcript path $real is forbidden (preserves forensic trail)." "$real" ;;
 esac
 
 exit 0
