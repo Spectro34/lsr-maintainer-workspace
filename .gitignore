@@ -1,0 +1,24 @@
+# Runtime state
+state/.lsr-maintainer-state.json
+state/.bootstrap-state.json
+state/.setup-complete.json
+state/PENDING_REVIEW.md
+state/cache/
+state/worktrees/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+
+# Test artefacts
+tests/.tmp/
+tests/.coverage
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~

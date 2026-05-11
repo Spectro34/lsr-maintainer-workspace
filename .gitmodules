@@ -1,0 +1,6 @@
+[submodule "projects/obs-package-skill"]
+	path = projects/obs-package-skill
+	url = git@github.com:Spectro34/obs-package-skill.git
+[submodule "projects/osc-mcp"]
+	path = projects/osc-mcp
+	url = git@github.com:Spectro34/osc-mcp.git
