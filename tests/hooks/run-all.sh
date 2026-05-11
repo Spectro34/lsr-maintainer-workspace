@@ -84,7 +84,7 @@ done
 N_BYPASS=(
   '{"tool_name":"Bash","tool_input":{"command":"coproc gh pr create"}}|N1 coproc keyword'
   '{"tool_name":"Bash","tool_input":{"command":"awk BEGIN{system(\"gh pr create\")}"}}|N2 awk system()'
-  '{"tool_name":"Bash","tool_input":{"command":"make all"}}|N3 make wrapper'
+  '{"tool_name":"Bash","tool_input":{"command":"make -f /tmp/evil.mk all"}}|N3 hostile make (custom Makefile)'
   '{"tool_name":"Bash","tool_input":{"command":"git submodule foreach gh pr create"}}|N4 git submodule foreach'
   '{"tool_name":"Bash","tool_input":{"command":"git rebase --exec \"gh pr create\" main"}}|N5 git rebase --exec'
   '{"tool_name":"Bash","tool_input":{"command":"git bisect run gh pr create"}}|N6 git bisect run'
@@ -117,6 +117,105 @@ for entry in "${LEGIT_BASH[@]}"; do
   desc="${entry##*|}"; json="${entry%|*}"
   code=$(run_hook "$UPSTREAM" "$json")
   check "ALLOW $desc" "0" "$code"
+done
+
+# ---- Round-3: bash <non-script-path> tightening (must DENY) ----
+BASH_PATH_BYPASS=(
+  '{"tool_name":"Bash","tool_input":{"command":"bash /etc/passwd"}}|R3 bash /etc/passwd (not .sh)'
+  '{"tool_name":"Bash","tool_input":{"command":"bash /tmp/x"}}|R3 bash /tmp/x (not .sh)'
+  '{"tool_name":"Bash","tool_input":{"command":"bash ../escape.sh"}}|R3 bash path traversal'
+  '{"tool_name":"Bash","tool_input":{"command":"sh /tmp/anyfile"}}|R3 sh non-workspace path'
+)
+for entry in "${BASH_PATH_BYPASS[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "DENY  $desc" "2" "$code"
+done
+
+# ---- Round-3: make <legit-target> must ALLOW (regression fix) ----
+LEGIT_MAKE=(
+  '{"tool_name":"Bash","tool_input":{"command":"make"}}|R3 bare make'
+  '{"tool_name":"Bash","tool_input":{"command":"make help"}}|R3 make help'
+  '{"tool_name":"Bash","tool_input":{"command":"make doctor"}}|R3 make doctor'
+  '{"tool_name":"Bash","tool_input":{"command":"make test-hooks"}}|R3 make test-hooks'
+  '{"tool_name":"Bash","tool_input":{"command":"make install"}}|R3 make install'
+  '{"tool_name":"Bash","tool_input":{"command":"make ROLE=squid enable-role"}}|R3 make VAR=val target'
+)
+for entry in "${LEGIT_MAKE[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "ALLOW $desc" "0" "$code"
+done
+
+# ---- Round-3: hostile make invocations must DENY ----
+MAKE_BYPASS=(
+  '{"tool_name":"Bash","tool_input":{"command":"make -f /tmp/evil.mk"}}|R3 make -f custom Makefile'
+  '{"tool_name":"Bash","tool_input":{"command":"make -C /tmp/evil all"}}|R3 make -C dir switch'
+  '{"tool_name":"Bash","tool_input":{"command":"make --include-dir=/tmp"}}|R3 make --include-dir'
+  '{"tool_name":"Bash","tool_input":{"command":"make ; rm -rf /"}}|R3 make chain bypass'
+)
+for entry in "${MAKE_BYPASS[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "DENY  $desc" "2" "$code"
+done
+
+# ---- Round-3: more wrappers (must DENY) ----
+R3_WRAPPERS=(
+  '{"tool_name":"Bash","tool_input":{"command":"time gh pr create"}}|R3 time wrapper'
+  '{"tool_name":"Bash","tool_input":{"command":"flock /tmp/x gh pr create"}}|R3 flock wrapper'
+  '{"tool_name":"Bash","tool_input":{"command":"taskset 0x1 gh pr create"}}|R3 taskset wrapper'
+  '{"tool_name":"Bash","tool_input":{"command":"strace gh pr create"}}|R3 strace wrapper'
+  '{"tool_name":"Bash","tool_input":{"command":"firejail gh pr create"}}|R3 firejail wrapper'
+  '{"tool_name":"Bash","tool_input":{"command":"docker run --rm img gh pr create"}}|R3 docker wrapper'
+  '{"tool_name":"Bash","tool_input":{"command":"podman run img cmd"}}|R3 podman wrapper'
+  '{"tool_name":"Bash","tool_input":{"command":"kubectl exec pod -- gh pr create"}}|R3 kubectl exec'
+  '{"tool_name":"Bash","tool_input":{"command":"nsenter -t 1 -m gh pr create"}}|R3 nsenter'
+  '{"tool_name":"Bash","tool_input":{"command":"socat EXEC:gh,pty -"}}|R3 socat EXEC'
+)
+for entry in "${R3_WRAPPERS[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "DENY  $desc" "2" "$code"
+done
+
+# ---- Round-3: gh subcommand owner gate extension ----
+GH_WRITE_BYPASS=(
+  '{"tool_name":"Bash","tool_input":{"command":"gh issue create --repo linux-system-roles/sudo --title x"}}|R3 gh issue create upstream'
+  '{"tool_name":"Bash","tool_input":{"command":"gh issue close --repo linux-system-roles/sudo 42"}}|R3 gh issue close upstream'
+  '{"tool_name":"Bash","tool_input":{"command":"gh release create --repo linux-system-roles/sudo v1.0"}}|R3 gh release create upstream'
+  '{"tool_name":"Bash","tool_input":{"command":"gh workflow run --repo linux-system-roles/sudo ci.yml"}}|R3 gh workflow run upstream'
+  '{"tool_name":"Bash","tool_input":{"command":"gh gist create file.txt"}}|R3 gh gist create (any)'
+  '{"tool_name":"Bash","tool_input":{"command":"gh issue create --title hi"}}|R3 gh issue create no --repo'
+)
+for entry in "${GH_WRITE_BYPASS[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "DENY  $desc" "2" "$code"
+done
+
+# ---- Round-3: gh read-only subcommands against upstream must still ALLOW ----
+GH_READ_OK=(
+  '{"tool_name":"Bash","tool_input":{"command":"gh issue view 42 --repo linux-system-roles/sudo"}}|R3 gh issue view upstream'
+  '{"tool_name":"Bash","tool_input":{"command":"gh issue list --repo linux-system-roles/sudo"}}|R3 gh issue list upstream'
+  '{"tool_name":"Bash","tool_input":{"command":"gh release list --repo linux-system-roles/sudo"}}|R3 gh release list upstream'
+)
+for entry in "${GH_READ_OK[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "ALLOW $desc" "0" "$code"
+done
+
+# ---- Round-3: git editor-override escapes ----
+GIT_EDITOR_BYPASS=(
+  '{"tool_name":"Bash","tool_input":{"command":"git -c core.editor=ls commit -e -m hi"}}|R3 git -c core.editor'
+  '{"tool_name":"Bash","tool_input":{"command":"git -c sequence.editor=ls rebase -i HEAD"}}|R3 git -c sequence.editor'
+  '{"tool_name":"Bash","tool_input":{"command":"git config core.editor=ls"}}|R3 git config core.editor write'
+)
+for entry in "${GIT_EDITOR_BYPASS[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "DENY  $desc" "2" "$code"
 done
 
 # But `bash -c "..."` and bare `bash` must still DENY

@@ -88,13 +88,20 @@ WRAPPERS_DENY="bash sh dash zsh ksh fish ash csh tcsh \
                watch unbuffer script \
                awk gawk mawk \
                make ssh scp rsync sftp \
-               tmux screen at batch crontab Xvfb"
+               tmux screen at batch crontab Xvfb \
+               time flock chronic ifne taskset chrt \
+               firejail bwrap strace ltrace valgrind gdb \
+               socat setpriv cset expect \
+               pssh parallel-ssh \
+               docker podman nsenter lxc lxc-attach kubectl oc"
 
 # True if the given command is a legitimate script invocation pattern:
-#   bash <path>.sh [args...]
-#   sh <path>.sh [args...]
+#   bash <relative-path-ending-.sh> [args...]
+#   sh <relative-path-ending-.sh> [args...]
+# AND the next token is a script path (ends in `.sh` OR starts with bin/tests/scripts/).
 # AND the next token doesn't start with `-` (no flags like -c/-i/-x/--rcfile).
 # AND there's no heredoc or redirect (`<`).
+# AND the path doesn't contain `..` (no traversal up out of the workspace).
 is_legit_script_runner() {
   local s="$1"
   local first="${s%% *}"
@@ -110,7 +117,42 @@ is_legit_script_runner() {
   esac
   # No heredoc/redirect anywhere.
   case "$s" in *'<<'*|*'< '*) return 1 ;; esac
-  # Looks legit (`bash script.sh ...` or `sh path/to/script.sh ...`).
+  # Reject path traversal.
+  case "$nextword" in *..*) return 1 ;; esac
+  # Require .sh suffix OR a workspace-relative path prefix (bin/, tests/, scripts/, etc.).
+  case "$nextword" in
+    *.sh) return 0 ;;
+    bin/*|tests/*|scripts/*|projects/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# True if the given command is a legitimate `make <target>` invocation:
+#   make           (default target)
+#   make help      (named target, no shell metachars)
+#   make ROLE=x enable-role  (var-prefix + target)
+# Rejects: make -f /tmp/evil.mk (custom makefile), make -C /tmp/evil (dir switch),
+#          make ; rm -rf /, make --include-dir=/tmp, etc.
+is_legit_make_runner() {
+  local s="$1"
+  local first="${s%% *}"
+  [[ "$first" != "make" ]] && return 1
+  # Reject any `-` flag (no -f/-C/-I/-W/-e/--include-dir/--directory/etc).
+  if [[ "$s" =~ (^|[[:space:]])- ]]; then return 1; fi
+  # Reject shell metachars / substitution / redirect that might escape.
+  case "$s" in
+    *'$('*|*'`'*|*'<<'*|*'< '*|*'>'*|*'|'*|*';'*|*'&'*) return 1 ;;
+  esac
+  # Each remaining token must be either a bare target name or VAR=value.
+  local rest="${s#make}"
+  local tok
+  for tok in $rest; do
+    case "$tok" in
+      [A-Za-z_][A-Za-z0-9_-]*) : ;;                            # bare target
+      [A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9._/-]*) : ;;            # VAR=value (safe chars only)
+      *) return 1 ;;
+    esac
+  done
   return 0
 }
 
@@ -129,12 +171,14 @@ detect_wrapper() {
   # `${s%% *}` returns "coproc" as a word, but case-statement match in main
   # loop won't catch it without explicit listing; treat coproc as a wrapper).
   if [[ "$s" =~ ^[[:space:]]*coproc[[:space:]] ]]; then echo "coproc keyword"; return; fi
-  # First word a known wrapper — but allow the narrow `bash <script.sh>` form.
+  # First word a known wrapper — but allow narrow legit forms:
+  #   `bash <script.sh>` for shell-script runners
+  #   `make <target>` for Makefile targets
   local first="${s%% *}"
   for w in $WRAPPERS_DENY; do
     if [[ "$first" == "$w" ]]; then
-      # Narrow allow-list for bash/sh script invocations.
       if is_legit_script_runner "$s"; then return; fi
+      if is_legit_make_runner "$s"; then return; fi
       echo "wrapper program: $w"; return;
     fi
   done
@@ -213,14 +257,40 @@ while IFS= read -r sub; do
       if [[ "$args" =~ --repo[[:space:]=]+([A-Za-z0-9._/-]+) ]]; then
         target="${BASH_REMATCH[1]}"
         owner="${target%%/*}"
-        if [[ "$owner" != "$ALLOW_GH_OWNER" ]] && [[ "$args" =~ " pr "|" repo " ]]; then
-          # Read-only gh commands like `gh pr view --repo X` are fine.
+        if [[ "$owner" != "$ALLOW_GH_OWNER" ]]; then
+          # Read-only gh subcommands are fine even against upstream.
           case "$args" in
             *" pr view"*|*" pr list"*|*" pr diff"*|*" pr checks"*|*" pr status"*) : ;;
-            *" repo view"*) : ;;
-            *) emit_block "gh write op against --repo $target is upstream; only ${ALLOW_GH_OWNER}/* allowed." "$sub" ;;
+            *" repo view"*|*" repo list"*) : ;;
+            *" issue view"*|*" issue list"*|*" issue status"*) : ;;
+            *" release view"*|*" release list"*) : ;;
+            *" workflow view"*|*" workflow list"*) : ;;
+            *" run view"*|*" run list"*|*" run watch"*) : ;;
+            *" api "*) : ;;  # gh api is read-mostly; calling user must reason about it
+            *" auth status"*) : ;;
+            *)
+              # Any write-style gh subcommand against non-Spectro34 → block.
+              # Catches: pr create/merge/close/edit/review,
+              #          repo create/delete/edit/fork --remote=,
+              #          issue create/edit/close/comment/develop/transfer,
+              #          release create/delete/edit/upload,
+              #          workflow run/enable/disable,
+              #          gist create/delete/edit,
+              #          secret/variable/ruleset/cache/label set/delete.
+              emit_block "gh write op against --repo $target is upstream; only ${ALLOW_GH_OWNER}/* allowed." "$sub" ;;
           esac
         fi
+      else
+        # No --repo flag, but commands without --repo may infer from cwd.
+        # For high-risk write ops with no explicit --repo, surface a warning-block.
+        case "$args" in
+          *" issue create"*|*" issue close"*|*" issue comment"*|*" issue edit"*)
+            emit_block "gh issue write op without --repo is risky (could target wrong repo); use explicit --repo Spectro34/<name>." "$sub" ;;
+          *" release create"*|*" release delete"*|*" release upload"*|*" release edit"*)
+            emit_block "gh release write op without --repo is risky." "$sub" ;;
+          *" gist create"*|*" gist delete"*|*" gist edit"*)
+            emit_block "gh gist write op forbidden (gists are public unless --secret; agent should not post)." "$sub" ;;
+        esac
       fi
       ;;
 
@@ -275,6 +345,12 @@ while IFS= read -r sub; do
           emit_block "git --upload-pack= is forbidden — can launch arbitrary commands." "$sub" ;;
         *" clone "*" --config core.sshCommand"*|*" -c core.sshCommand"*)
           emit_block "git core.sshCommand override is forbidden." "$sub" ;;
+        *" -c core.editor"*|*" -c sequence.editor"*|*" -c diff.external"*|*" -c merge.tool"*|*" -c pager.*"*|*" -c help.format"*)
+          emit_block "git -c <config-override-that-runs-a-command> is forbidden." "$sub" ;;
+        *" config "*core.editor*)
+          emit_block "git config core.editor write is forbidden (would launch arbitrary cmd at next commit)." "$sub" ;;
+        *" config "*sequence.editor*)
+          emit_block "git config sequence.editor write is forbidden." "$sub" ;;
       esac
       case "$args" in
         *" push "*)

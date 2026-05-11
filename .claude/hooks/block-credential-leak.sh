@@ -92,9 +92,21 @@ except Exception:
       sudo|doas|pkexec|runuser|su|\
       watch|unbuffer|script|\
       awk|gawk|mawk|\
-      make|ssh|scp|rsync|sftp|\
-      tmux|screen|at|batch|crontab|Xvfb)
+      ssh|scp|rsync|sftp|\
+      tmux|screen|at|batch|crontab|Xvfb|\
+      time|flock|chronic|ifne|taskset|chrt|\
+      firejail|bwrap|strace|ltrace|valgrind|gdb|\
+      socat|setpriv|cset|expect|\
+      pssh|parallel-ssh|\
+      docker|podman|nsenter|lxc|lxc-attach|kubectl|oc)
         emit_block "Wrapper program ($first_word) forbidden — could hide a credential read." "$cmd"
+        ;;
+      make)
+        # Narrow allow: `make <target>` with no -f/-C/-I and no shell metachars.
+        if [[ "$cmd" =~ (^|[[:space:]])- ]] || [[ "$cmd" == *'$('* ]] || [[ "$cmd" == *'`'* ]] || \
+           [[ "$cmd" == *'>'* ]] || [[ "$cmd" == *'|'* ]] || [[ "$cmd" == *';'* ]]; then
+          emit_block "make with flags or shell metachars forbidden." "$cmd"
+        fi
         ;;
     esac
 
