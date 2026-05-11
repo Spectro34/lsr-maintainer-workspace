@@ -51,6 +51,35 @@ for entry in "${ALLOW_CASES[@]}"; do
   check "ALLOW $desc" "0" "$code"
 done
 
+# ---- C1/C2 reviewer-found bypasses for upstream-actions hook ----
+# All must now DENY. (Pre-fix: all bypassed via wrapper not being a known
+# program name. Post-fix: wrappers blocked outright + newline-aware splits.)
+BYPASS_CASES=(
+  '{"tool_name":"Bash","tool_input":{"command":"bash -c \"gh pr create --repo Foo/bar\""}}|wrapper bash -c'
+  '{"tool_name":"Bash","tool_input":{"command":"sh -c gh pr create"}}|wrapper sh -c'
+  '{"tool_name":"Bash","tool_input":{"command":"eval gh pr create --repo Foo/bar"}}|wrapper eval'
+  '{"tool_name":"Bash","tool_input":{"command":"exec gh pr create --repo Foo/bar"}}|wrapper exec'
+  '{"tool_name":"Bash","tool_input":{"command":"xargs -I{} gh pr create --repo {}"}}|wrapper xargs'
+  '{"tool_name":"Bash","tool_input":{"command":"timeout 5 gh pr create --repo Foo/bar"}}|wrapper timeout'
+  '{"tool_name":"Bash","tool_input":{"command":"nohup gh pr create --repo Foo/bar"}}|wrapper nohup'
+  '{"tool_name":"Bash","tool_input":{"command":"setsid gh pr create"}}|wrapper setsid'
+  '{"tool_name":"Bash","tool_input":{"command":"python3 -c \"import subprocess; subprocess.run([\\\"gh\\\",\\\"pr\\\",\\\"create\\\"])\""}}|wrapper python3 -c'
+  '{"tool_name":"Bash","tool_input":{"command":"perl -e print"}}|wrapper perl -e'
+  '{"tool_name":"Bash","tool_input":{"command":"node -e console.log"}}|wrapper node -e'
+  '{"tool_name":"Bash","tool_input":{"command":"sudo gh pr create"}}|wrapper sudo'
+  '{"tool_name":"Bash","tool_input":{"command":"find . -name X -exec gh pr create {} ;"}}|find -exec bypass class'
+  '{"tool_name":"Bash","tool_input":{"command":"echo $(gh pr create --repo Foo/bar)"}}|command substitution dollar-paren'
+  '{"tool_name":"Bash","tool_input":{"command":"echo `gh pr create --repo Foo/bar`"}}|backtick substitution'
+  '{"tool_name":"Bash","tool_input":{"command":"echo ok\ngh pr create --repo Foo/bar"}}|newline-chained command'
+  '{"tool_name":"Bash","tool_input":{"command":"watch gh pr create"}}|wrapper watch'
+  '{"tool_name":"Bash","tool_input":{"command":"unbuffer gh pr create"}}|wrapper unbuffer'
+)
+for entry in "${BYPASS_CASES[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "DENY  bypass-fix $desc" "2" "$code"
+done
+
 # Deny-list
 DENY_CASES=(
   '{"tool_name":"Bash","tool_input":{"command":"gh pr create --repo linux-system-roles/sudo"}}|gh pr create against upstream'
@@ -94,6 +123,35 @@ for entry in "${CRED_ALLOW[@]}"; do
   desc="${entry##*|}"; json="${entry%|*}"
   code=$(run_hook "$CRED" "$json")
   check "ALLOW $desc" "0" "$code"
+done
+
+# ---- C3 reviewer-found cred-leak bypasses ----
+CRED_BYPASS=(
+  '{"tool_name":"Bash","tool_input":{"command":"bash -c"}}|wrapper bash -c (any args)'
+  '{"tool_name":"Bash","tool_input":{"command":"python3 -c x"}}|wrapper python3 -c (any args)'
+  '{"tool_name":"Bash","tool_input":{"command":"perl -e x"}}|wrapper perl -e (any args)'
+  '{"tool_name":"Bash","tool_input":{"command":"sudo cat hi"}}|wrapper sudo (any args)'
+  '{"tool_name":"Bash","tool_input":{"command":"eval x"}}|wrapper eval (any args)'
+  '{"tool_name":"Bash","tool_input":{"command":"source /home/spectro/.config/osc/oscrc"}}|source cred path'
+  '{"tool_name":"Bash","tool_input":{"command":". /home/spectro/.config/osc/oscrc"}}|dot-source cred path'
+  '{"tool_name":"Bash","tool_input":{"command":"echo hi $(cat hi)"}}|command substitution forbidden'
+  '{"tool_name":"Bash","tool_input":{"command":"echo `cat hi`"}}|backtick forbidden'
+  '{"tool_name":"Bash","tool_input":{"command":"xxd /home/spectro/.ssh/id_ed25519"}}|xxd cred path (path-based deny)'
+  '{"tool_name":"Bash","tool_input":{"command":"od -c /home/spectro/.ssh/id_rsa"}}|od cred path'
+  '{"tool_name":"Bash","tool_input":{"command":"cp /home/spectro/.ssh/id_rsa /tmp/x"}}|cp cred path'
+  '{"tool_name":"Bash","tool_input":{"command":"tar cf /tmp/ss.tar /home/spectro/.ssh/id_rsa"}}|tar over cred path'
+  '{"tool_name":"Bash","tool_input":{"command":"vim /home/spectro/.ssh/id_rsa"}}|vim cred path'
+  '{"tool_name":"Bash","tool_input":{"command":"dd if=/home/spectro/.ssh/id_rsa"}}|dd cred path'
+  '{"tool_name":"Bash","tool_input":{"command":"declare -p"}}|declare -p env dump'
+  '{"tool_name":"Bash","tool_input":{"command":"typeset -x"}}|typeset -x env dump'
+  '{"tool_name":"Bash","tool_input":{"command":"compgen -v"}}|compgen -v env dump'
+  '{"tool_name":"Bash","tool_input":{"command":"cat /proc/self/environ"}}|/proc/self/environ dump'
+  '{"tool_name":"Bash","tool_input":{"command":"head /proc/12345/environ"}}|/proc/<pid>/environ dump'
+)
+for entry in "${CRED_BYPASS[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$CRED" "$json")
+  check "DENY  cred-bypass-fix $desc" "2" "$code"
 done
 
 CRED_DENY=(

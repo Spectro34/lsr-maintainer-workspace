@@ -87,7 +87,7 @@ This is a checklist you consult at every branch point. **Do not deviate.**
 
 **Parallel-fanout rules:**
 - **Reads fan out**: review board (4 reviewers in parallel), queue refresh (3 pollers in parallel).
-- **Writes serialize**: one `bug-fix-implementer` per role at a time; one `obs-package-maintainer` per package at a time. Enforce with an in-memory `(component, target)` lock.
+- **Writes serialize**: one `bug-fix-implementer` per role at a time; one `obs-package-maintainer` per package at a time. Enforced naturally by the orchestrator's sequential queue-pop loop within a single run, AND by a `state/.run.lock` flock (see `references/workflow-run.md` §"Phase 0") that prevents concurrent `/lsr-maintainer run` invocations (cron-vs-manual collision) from clobbering state.
 - **Cross-role work fans out**: 3 different roles each with independent items run their pipelines in parallel.
 
 **Concurrency cap**: 6 simultaneous sub-agents. Above that, queue.

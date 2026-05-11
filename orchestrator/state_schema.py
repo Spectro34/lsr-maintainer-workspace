@@ -19,11 +19,59 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def default_role_entry(role: str, version: str | None = None, sle16_only: bool = False) -> dict[str, Any]:
+    """Per-role state structure. Every field that any sub-agent reads must
+    have a default here so the first run never sees KeyError / None.
+    """
+    return {
+        "role": role,
+        "version": version,
+        "sle16_only": sle16_only,
+        "upstream_default_branch": "main",
+        "last_seen_upstream_sha": None,
+        "fork_branch": "fix/suse-support",
+        "fork_repo": f"Spectro34/{role}",
+        "upstream_repo": None,  # populated when first seen
+        "patched_files": [],
+        "last_local_test": {},  # keyed by target → {result, at, sha, image, via}
+        "pr_cursors": {},       # keyed by PR number → {last_seen_*}
+        "fix_attempts_by_pr": {},  # keyed by PR number → count (for retry caps)
+    }
+
+
+def seed_roles_from_manifest(state: dict[str, Any], managed_roles: list[dict[str, Any]]) -> int:
+    """Ensure every role in managed_roles[] has a per-role entry in state.roles.
+    Returns the number of NEW entries created (not updates).
+
+    Called by the orchestrator after manifest-syncer returns.
+    Existing entries are preserved; only missing fields are filled in from
+    default_role_entry().
+    """
+    created = 0
+    for r in managed_roles:
+        name = r.get("name")
+        if not name:
+            continue
+        if name not in state["roles"]:
+            state["roles"][name] = default_role_entry(name, r.get("version"), r.get("sle16_only", False))
+            created += 1
+        else:
+            # Fill in any missing fields from defaults (forward-compat).
+            defaults = default_role_entry(name)
+            for k, v in defaults.items():
+                state["roles"][name].setdefault(k, v)
+            # Keep version + sle16_only in sync with manifest.
+            state["roles"][name]["version"] = r.get("version")
+            state["roles"][name]["sle16_only"] = r.get("sle16_only", False)
+    return created
+
+
 def default_state() -> dict[str, Any]:
     return {
         "version": STATE_VERSION,
         "last_run_started_at": None,
         "last_run_completed_at": None,
+        "last_run_aborted": False,
         "queue": [],
         "roles": {},
         "obs": {
@@ -135,4 +183,23 @@ if __name__ == "__main__":
     s2 = load_state(p)
     assert s2["queue"][0]["id"] == "test-2", "priority sort broken"
     assert s2["queue"][1]["id"] == "test-1"
+
+    # Seed-from-manifest sanity.
+    manifest = [
+        {"name": "sudo", "version": "1.5.2", "sle16_only": False},
+        {"name": "certificate", "version": "1.3.11", "sle16_only": True},
+    ]
+    created = seed_roles_from_manifest(s2, manifest)
+    assert created == 2, f"expected 2 new role entries, got {created}"
+    assert s2["roles"]["sudo"]["fork_repo"] == "Spectro34/sudo"
+    assert s2["roles"]["sudo"]["patched_files"] == []
+    assert s2["roles"]["sudo"]["pr_cursors"] == {}
+    assert s2["roles"]["certificate"]["sle16_only"] is True
+    # Re-seed: idempotent, returns 0 new.
+    assert seed_roles_from_manifest(s2, manifest) == 0
+    # Existing entry preserved across re-seed.
+    s2["roles"]["sudo"]["patched_files"] = ["library/scan_sudoers.py"]
+    seed_roles_from_manifest(s2, manifest)
+    assert s2["roles"]["sudo"]["patched_files"] == ["library/scan_sudoers.py"]
+
     print("OK", p)

@@ -61,31 +61,59 @@ except Exception:
 ')"
     [[ -z "$cmd" ]] && exit 0
 
-    # Block bare env / printenv (printing the whole environment).
+    # 1. Block wrapper programs that could hide credential reads behind a
+    #    different program name. (Sister hook block-upstream-actions.sh blocks
+    #    these too, but defense-in-depth.)
+    case "${cmd%% *}" in
+      bash|sh|dash|zsh|ksh|fish|ash|csh|tcsh|\
+      eval|exec|source|.|\
+      xargs|parallel|env|nohup|timeout|setsid|nice|ionice|\
+      python|python2|python3|perl|ruby|node|nodejs|lua|tcl|php|\
+      sudo|doas|pkexec|runuser|su|\
+      watch|unbuffer|script)
+        emit_block "Wrapper program forbidden — could hide a credential read." "$cmd"
+        ;;
+    esac
+
+    # 2. Block command substitution and backticks at the string level.
+    if [[ "$cmd" == *'$('* ]] || [[ "$cmd" == *'`'* ]]; then
+      emit_block "Command substitution forbidden — could hide a credential read." "$cmd"
+    fi
+
+    # 3. Block env-dump primitives.
     if [[ "$cmd" =~ (^|[\;\|\&[:space:]])env([[:space:]]|$) ]]; then
       emit_block "Bare 'env' dumps secret env vars — forbidden." "$cmd"
     fi
     if [[ "$cmd" =~ (^|[\;\|\&[:space:]])printenv([[:space:]]|$) ]]; then
       emit_block "'printenv' dumps secret env vars — forbidden." "$cmd"
     fi
-    # Block `set` with no args (dumps env in many shells).
     if [[ "$cmd" =~ (^|[\;\|\&])[[:space:]]*set[[:space:]]*$ ]]; then
       emit_block "Bare 'set' dumps shell state including secrets — forbidden." "$cmd"
     fi
-    # Block `echo $SOMETHING_SECRET` patterns.
+    # Block declare/typeset/compgen/export env dumps.
+    for envdump in 'declare -p' 'typeset -x' 'compgen -v' 'compgen -e'; do
+      if [[ "$cmd" == *"$envdump"* ]]; then
+        emit_block "'$envdump' dumps env including secrets — forbidden." "$cmd"
+      fi
+    done
+    # Block /proc/self/environ reads (dumps process env).
+    if [[ "$cmd" == */proc/self/environ* ]] || [[ "$cmd" == */proc/*/environ* ]]; then
+      emit_block "Reading /proc/*/environ dumps process env — forbidden." "$cmd"
+    fi
+
+    # 4. Block echo $SECRET_VAR patterns.
     if [[ "$cmd" =~ echo[[:space:]]+\"?\$[A-Za-z_][A-Za-z0-9_]*(TOKEN|PASSWORD|SECRET|API_KEY|ACCESS_KEY|PRIVATE_KEY|AUTH)[A-Za-z0-9_]* ]] || \
        [[ "$cmd" =~ echo[[:space:]]+\"?\$\{[A-Za-z_][A-Za-z0-9_]*(TOKEN|PASSWORD|SECRET|API_KEY|ACCESS_KEY|PRIVATE_KEY|AUTH)[A-Za-z0-9_]* ]]; then
       emit_block "echo of secret-looking env var is forbidden." "$cmd"
     fi
-    # Block cat/head/tail/less/more/grep against credential paths.
-    for prog in cat head tail less more grep awk sed strings; do
-      if [[ "$cmd" =~ (^|[\;\|\&[:space:]])${prog}[[:space:]] ]]; then
-        for pat in "${CRED_PATHS[@]}"; do
-          # shellcheck disable=SC2053
-          if [[ "$cmd" == *${pat}* ]]; then
-            emit_block "$prog against credential path is forbidden ($pat)." "$cmd"
-          fi
-        done
+
+    # 5. CRITICAL: Block ANY mention of a credential path in the command,
+    #    regardless of which binary is invoked. Catches cp, mv, tar, xxd, od,
+    #    vim, dd, source, ., and anything else we didn't think to enumerate.
+    for pat in "${CRED_PATHS[@]}"; do
+      # shellcheck disable=SC2053
+      if [[ "$cmd" == *${pat}* ]]; then
+        emit_block "Credential path mentioned in command ($pat) — forbidden regardless of tool." "$cmd"
       fi
     done
     ;;

@@ -1,0 +1,11 @@
+# Pinned tox-lsr install reference.
+#
+# This file declares the canonical install line for tox-lsr that the
+# bootstrap-runner uses to create the venv at ~/github/ansible/testing/tox-lsr-venv/.
+#
+# Format: a single pip-compatible install spec on one non-comment line.
+#
+# Why pinned: tox-lsr can break between releases when a new ansible-core or
+# new QEMU image format ships. Pinning lets us upgrade deliberately.
+
+tox-lsr==3.5.0

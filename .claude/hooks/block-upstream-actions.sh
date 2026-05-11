@@ -54,11 +54,11 @@ osc_proj_is_upstream() {
   esac
 }
 
-# Split a chained command on ; && || and re-check each part. Doesn't try to
-# be a full shell parser — enough to catch easy obfuscation like
-# `false; gh pr create --repo ...`.
+# Split a chained command on ; && || \n and re-check each part. Doesn't try
+# to be a full shell parser — enough to catch easy obfuscation like
+# `false; gh pr create --repo ...` or multi-line commands.
 split_chained() {
-  printf '%s\n' "$1" | tr ';|&' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+  printf '%s\n' "$1" | tr ';|&\n' '\n\n\n\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
 # Strip leading "VAR=val VAR=val " env-var prefixes so the command itself is
@@ -69,6 +69,41 @@ strip_env_prefix() {
     s="${s#* }"
   done
   printf '%s' "$s"
+}
+
+# Wrapper programs that can launch arbitrary commands. We block these outright
+# because (a) the agent has no legitimate need for shell-of-shell trickery in
+# normal operation, and (b) allowing them creates a hook bypass — e.g.,
+# `bash -c "gh pr create --repo X"` only shows `bash` as the program name.
+#
+# Also blocks command substitution `$(...)` and backticks at the string level.
+WRAPPERS_DENY="bash sh dash zsh ksh fish ash csh tcsh \
+               eval exec source . \
+               xargs parallel env nohup timeout setsid nice ionice \
+               python python2 python3 perl ruby node nodejs lua tcl php \
+               sudo doas pkexec runuser su \
+               watch unbuffer script"
+
+# True if the given command string contains a shell-wrapper invocation, command
+# substitution, backtick, or variable-expanded command. Echoes a reason on
+# match. Empty stdout = no wrapper detected.
+detect_wrapper() {
+  local s="$1"
+  # Command substitution $(...)
+  if [[ "$s" == *'$('* ]]; then echo "command substitution \$(...)"; return; fi
+  # Backticks
+  if [[ "$s" == *'`'* ]]; then echo "backtick command substitution"; return; fi
+  # Heredoc that pipes into a wrapper (catches `bash <<EOF ... EOF`)
+  if [[ "$s" =~ \<\<-?[[:space:]]*[\"\']?[A-Za-z_] ]]; then echo "heredoc input"; return; fi
+  # First word a known wrapper
+  local first="${s%% *}"
+  for w in $WRAPPERS_DENY; do
+    if [[ "$first" == "$w" ]]; then echo "wrapper program: $w"; return; fi
+  done
+  # Variable expansion as a command: `$cmd`, `${cmd}`, `"$cmd"` at start
+  if [[ "$first" =~ ^[\"\']?\$\{? ]]; then echo "variable-expanded command"; return; fi
+  # Quick check: aliases via 'alias x=...' setup followed by use of x
+  if [[ "$s" =~ ^[[:space:]]*alias[[:space:]] ]]; then echo "alias definition"; return; fi
 }
 
 # --------------------------------------------------------------- parse input
@@ -87,13 +122,32 @@ except Exception:
 # Not a Bash call → allow.
 [[ -z "$cmd" ]] && exit 0
 
+# Check for wrappers at the FULL command level first (before chain split, so
+# we catch heredocs and command substitution that may span chain operators).
+wrapper_reason="$(detect_wrapper "$cmd")"
+if [[ -n "$wrapper_reason" ]]; then
+  emit_block "Wrapper invocations forbidden ($wrapper_reason). The agent must call CLIs directly." "$cmd"
+fi
+
 # Iterate over chained subcommands.
 while IFS= read -r sub; do
   [[ -z "$sub" ]] && continue
   sub="$(strip_env_prefix "$sub")"
 
+  # Re-check each chained subcommand for wrappers (in case the user chains
+  # `something_innocent && bash -c "..."`).
+  wrapper_reason="$(detect_wrapper "$sub")"
+  if [[ -n "$wrapper_reason" ]]; then
+    emit_block "Wrapper invocations forbidden in chained command ($wrapper_reason)." "$sub"
+  fi
+
   # Get the program (first word, ignoring any leading expansion).
   prog="${sub%% *}"
+
+  # Block `find ... -exec X ...` which is its own bypass class.
+  if [[ "$prog" == "find" ]] && [[ "$sub" =~ -exec[[:space:]] ]]; then
+    emit_block "find -exec is forbidden (bypass class)." "$sub"
+  fi
 
   case "$prog" in
     # ----------------------------------------------------------- gh
