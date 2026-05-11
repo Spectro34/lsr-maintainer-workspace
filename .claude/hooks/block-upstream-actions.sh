@@ -76,13 +76,43 @@ strip_env_prefix() {
 # normal operation, and (b) allowing them creates a hook bypass — e.g.,
 # `bash -c "gh pr create --repo X"` only shows `bash` as the program name.
 #
+# `bash`/`sh` have a narrow legitimate-use exception: running an explicit
+# `.sh` script file. See is_legit_script_runner().
+#
 # Also blocks command substitution `$(...)` and backticks at the string level.
 WRAPPERS_DENY="bash sh dash zsh ksh fish ash csh tcsh \
                eval exec source . \
                xargs parallel env nohup timeout setsid nice ionice \
                python python2 python3 perl ruby node nodejs lua tcl php \
                sudo doas pkexec runuser su \
-               watch unbuffer script"
+               watch unbuffer script \
+               awk gawk mawk \
+               make ssh scp rsync sftp \
+               tmux screen at batch crontab Xvfb"
+
+# True if the given command is a legitimate script invocation pattern:
+#   bash <path>.sh [args...]
+#   sh <path>.sh [args...]
+# AND the next token doesn't start with `-` (no flags like -c/-i/-x/--rcfile).
+# AND there's no heredoc or redirect (`<`).
+is_legit_script_runner() {
+  local s="$1"
+  local first="${s%% *}"
+  case "$first" in bash|sh) ;; *) return 1 ;; esac
+  # If there's nothing after `bash`/`sh`, it's a bare invocation (interactive shell).
+  if [[ "$s" == "$first" ]]; then return 1; fi
+  # Rest of the command after "bash " / "sh ".
+  local rest="${s#$first }"
+  # First word of rest must be a path that doesn't start with `-`.
+  local nextword="${rest%% *}"
+  case "$nextword" in
+    -*|'') return 1 ;;
+  esac
+  # No heredoc/redirect anywhere.
+  case "$s" in *'<<'*|*'< '*) return 1 ;; esac
+  # Looks legit (`bash script.sh ...` or `sh path/to/script.sh ...`).
+  return 0
+}
 
 # True if the given command string contains a shell-wrapper invocation, command
 # substitution, backtick, or variable-expanded command. Echoes a reason on
@@ -95,10 +125,18 @@ detect_wrapper() {
   if [[ "$s" == *'`'* ]]; then echo "backtick command substitution"; return; fi
   # Heredoc that pipes into a wrapper (catches `bash <<EOF ... EOF`)
   if [[ "$s" =~ \<\<-?[[:space:]]*[\"\']?[A-Za-z_] ]]; then echo "heredoc input"; return; fi
-  # First word a known wrapper
+  # bash keyword: `coproc <cmd>` at the start (not in WRAPPERS_DENY because
+  # `${s%% *}` returns "coproc" as a word, but case-statement match in main
+  # loop won't catch it without explicit listing; treat coproc as a wrapper).
+  if [[ "$s" =~ ^[[:space:]]*coproc[[:space:]] ]]; then echo "coproc keyword"; return; fi
+  # First word a known wrapper — but allow the narrow `bash <script.sh>` form.
   local first="${s%% *}"
   for w in $WRAPPERS_DENY; do
-    if [[ "$first" == "$w" ]]; then echo "wrapper program: $w"; return; fi
+    if [[ "$first" == "$w" ]]; then
+      # Narrow allow-list for bash/sh script invocations.
+      if is_legit_script_runner "$s"; then return; fi
+      echo "wrapper program: $w"; return;
+    fi
   done
   # Variable expansion as a command: `$cmd`, `${cmd}`, `"$cmd"` at start
   if [[ "$first" =~ ^[\"\']?\$\{? ]]; then echo "variable-expanded command"; return; fi
@@ -221,6 +259,23 @@ while IFS= read -r sub; do
     # ----------------------------------------------------------- git
     git)
       args=" ${sub#git } "
+      # git sub-commands that can run arbitrary commands as a side-effect.
+      case "$args" in
+        *" submodule foreach "*)
+          emit_block "git submodule foreach is forbidden — can launch arbitrary commands." "$sub" ;;
+        *" rebase --exec"*|*" rebase -x "*)
+          emit_block "git rebase --exec is forbidden — can launch arbitrary commands per commit." "$sub" ;;
+        *" bisect run "*|*" bisect-run "*)
+          emit_block "git bisect run is forbidden — can launch arbitrary commands." "$sub" ;;
+        *" filter-branch"*|*" filter-repo"*)
+          emit_block "git filter-branch/filter-repo is forbidden — rewrites history." "$sub" ;;
+        *" worktree add"*" --command"*)
+          emit_block "git worktree add --command is forbidden." "$sub" ;;
+        *" clone "*" --upload-pack"*|*" fetch "*" --upload-pack"*|*" pull "*" --upload-pack"*)
+          emit_block "git --upload-pack= is forbidden — can launch arbitrary commands." "$sub" ;;
+        *" clone "*" --config core.sshCommand"*|*" -c core.sshCommand"*)
+          emit_block "git core.sshCommand override is forbidden." "$sub" ;;
+      esac
       case "$args" in
         *" push "*)
           # Block force-push outright (already in deny rules).

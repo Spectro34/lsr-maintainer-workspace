@@ -80,6 +80,58 @@ for entry in "${BYPASS_CASES[@]}"; do
   check "DENY  bypass-fix $desc" "2" "$code"
 done
 
+# ---- N1-N10 re-review bypass vectors (must DENY) ----
+N_BYPASS=(
+  '{"tool_name":"Bash","tool_input":{"command":"coproc gh pr create"}}|N1 coproc keyword'
+  '{"tool_name":"Bash","tool_input":{"command":"awk BEGIN{system(\"gh pr create\")}"}}|N2 awk system()'
+  '{"tool_name":"Bash","tool_input":{"command":"make all"}}|N3 make wrapper'
+  '{"tool_name":"Bash","tool_input":{"command":"git submodule foreach gh pr create"}}|N4 git submodule foreach'
+  '{"tool_name":"Bash","tool_input":{"command":"git rebase --exec \"gh pr create\" main"}}|N5 git rebase --exec'
+  '{"tool_name":"Bash","tool_input":{"command":"git bisect run gh pr create"}}|N6 git bisect run'
+  '{"tool_name":"Bash","tool_input":{"command":"ssh host gh pr create"}}|N7 ssh remote'
+  '{"tool_name":"Bash","tool_input":{"command":"tmux new-window gh pr create"}}|N8a tmux'
+  '{"tool_name":"Bash","tool_input":{"command":"screen -dm gh pr create"}}|N8b screen'
+  '{"tool_name":"Bash","tool_input":{"command":"Xvfb :99 -- gh pr create"}}|N9 Xvfb'
+  '{"tool_name":"Bash","tool_input":{"command":"crontab -l"}}|N10a crontab'
+  '{"tool_name":"Bash","tool_input":{"command":"at now"}}|N10b at'
+  '{"tool_name":"Bash","tool_input":{"command":"batch"}}|N10c batch'
+  '{"tool_name":"Bash","tool_input":{"command":"git filter-branch --tree-filter ls"}}|N-filter-branch'
+  '{"tool_name":"Bash","tool_input":{"command":"git -c core.sshCommand=ls fetch"}}|N-ssh-command override'
+  '{"tool_name":"Bash","tool_input":{"command":"rsync -e gh pr create file host:"}}|N-rsync wrapper'
+)
+for entry in "${N_BYPASS[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "DENY  N-bypass $desc" "2" "$code"
+done
+
+# ---- MJ-2 fix: legitimate `bash <script.sh>` invocations must ALLOW ----
+LEGIT_BASH=(
+  '{"tool_name":"Bash","tool_input":{"command":"bash tests/hooks/run-all.sh"}}|MJ-2 bash tests/hooks/run-all.sh'
+  '{"tool_name":"Bash","tool_input":{"command":"bash bin/install-deps.sh"}}|MJ-2 bash bin/install-deps.sh'
+  '{"tool_name":"Bash","tool_input":{"command":"bash bin/setup.sh"}}|MJ-2 bash bin/setup.sh'
+  '{"tool_name":"Bash","tool_input":{"command":"bash bin/install-cron.sh --remove"}}|MJ-2 bash bin/install-cron.sh with arg'
+  '{"tool_name":"Bash","tool_input":{"command":"sh some/path/build.sh arg1 arg2"}}|MJ-2 sh script.sh args'
+)
+for entry in "${LEGIT_BASH[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "ALLOW $desc" "0" "$code"
+done
+
+# But `bash -c "..."` and bare `bash` must still DENY
+BASH_BYPASS_RECONFIRM=(
+  '{"tool_name":"Bash","tool_input":{"command":"bash -c \"echo hi\""}}|bash -c still denies'
+  '{"tool_name":"Bash","tool_input":{"command":"bash -ic hi"}}|bash -ic still denies'
+  '{"tool_name":"Bash","tool_input":{"command":"bash"}}|bare bash still denies'
+  '{"tool_name":"Bash","tool_input":{"command":"bash <<EOF"}}|bash <<EOF still denies'
+)
+for entry in "${BASH_BYPASS_RECONFIRM[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "DENY  $desc" "2" "$code"
+done
+
 # Deny-list
 DENY_CASES=(
   '{"tool_name":"Bash","tool_input":{"command":"gh pr create --repo linux-system-roles/sudo"}}|gh pr create against upstream'

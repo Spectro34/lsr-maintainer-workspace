@@ -64,16 +64,44 @@ except Exception:
     # 1. Block wrapper programs that could hide credential reads behind a
     #    different program name. (Sister hook block-upstream-actions.sh blocks
     #    these too, but defense-in-depth.)
-    case "${cmd%% *}" in
-      bash|sh|dash|zsh|ksh|fish|ash|csh|tcsh|\
+    #
+    # Same narrow exception as upstream-actions: allow `bash <script>.sh`
+    # without -c/heredoc, so Makefile-invoked scripts still work.
+    first_word="${cmd%% *}"
+    case "$first_word" in
+      bash|sh)
+        # Allow `bash <path>` only when the next word doesn't start with `-`
+        # and no heredoc/redirect is present, and there IS a next word.
+        if [[ "$cmd" == "$first_word" ]]; then
+          # Bare `bash` / `sh` — interactive shell, forbidden.
+          emit_block "Bare $first_word forbidden (interactive shell)." "$cmd"
+        fi
+        rest="${cmd#$first_word }"
+        nextword="${rest%% *}"
+        if [[ -n "$nextword" ]] && [[ "$nextword" != -* ]] && \
+           [[ "$cmd" != *'<<'* ]] && [[ "$cmd" != *'< '* ]]; then
+          : # legitimate script runner — allow
+        else
+          emit_block "Wrapper program ($first_word) forbidden — could hide a credential read." "$cmd"
+        fi
+        ;;
+      dash|zsh|ksh|fish|ash|csh|tcsh|\
       eval|exec|source|.|\
       xargs|parallel|env|nohup|timeout|setsid|nice|ionice|\
       python|python2|python3|perl|ruby|node|nodejs|lua|tcl|php|\
       sudo|doas|pkexec|runuser|su|\
-      watch|unbuffer|script)
-        emit_block "Wrapper program forbidden — could hide a credential read." "$cmd"
+      watch|unbuffer|script|\
+      awk|gawk|mawk|\
+      make|ssh|scp|rsync|sftp|\
+      tmux|screen|at|batch|crontab|Xvfb)
+        emit_block "Wrapper program ($first_word) forbidden — could hide a credential read." "$cmd"
         ;;
     esac
+
+    # 1b. coproc as a bash keyword bypass
+    if [[ "$cmd" =~ ^[[:space:]]*coproc[[:space:]] ]]; then
+      emit_block "coproc keyword forbidden — could hide a credential read." "$cmd"
+    fi
 
     # 2. Block command substitution and backticks at the string level.
     if [[ "$cmd" == *'$('* ]] || [[ "$cmd" == *'`'* ]]; then

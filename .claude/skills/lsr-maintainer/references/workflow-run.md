@@ -8,22 +8,53 @@ This is the full nightly autonomous workflow. The orchestrator (SKILL.md) loads 
 - `.claude/settings.json` loaded → security hooks active
 - `state/` exists (created by `make install-deps`)
 
-## Phase 0 — Acquire run lock
+## Phase 0 — Acquire run lock (pidfile)
 
-To prevent cron-vs-manual collisions (M-state, issue #7):
+To prevent cron-vs-manual collisions, use a pidfile pattern that survives across the orchestrator's individual Bash tool calls (which run in separate shell processes — an `flock -n 9 ... 9>file` pattern would not survive).
+
+Orchestrator does this as a Bash call:
 
 ```bash
-# Use a PID lockfile + fcntl-flock check
-LOCKFILE=state/.run.lock
-if ! flock -n 9; then
-  echo "another /lsr-maintainer run is in progress (PID $(cat state/.run.pid 2>/dev/null)) — exiting cleanly"
-  exit 0
-fi 9>"$LOCKFILE"
-echo $$ > state/.run.pid
-trap 'rm -f state/.run.pid' EXIT
+PIDFILE=state/.run.pid
+if [ -f "$PIDFILE" ]; then
+  OLDPID=$(cat "$PIDFILE" 2>/dev/null)
+  if [ -n "$OLDPID" ] && kill -0 "$OLDPID" 2>/dev/null; then
+    echo "RUN_LOCK_HELD pid=$OLDPID"
+    exit 0
+  fi
+  # Stale pidfile — previous run crashed. Continue but flag it.
+  echo "STALE_PIDFILE pid=$OLDPID"
+fi
+echo $$ > "$PIDFILE"
+echo "RUN_LOCK_ACQUIRED pid=$$"
 ```
 
-The orchestrator should attempt this via `Bash` and refuse to proceed if the lock can't be acquired. Cron retries the next slot.
+Orchestrator parses the output:
+
+- `RUN_LOCK_HELD` → exit cleanly (cron retries next slot).
+- `STALE_PIDFILE` → set `state.last_run_aborted = true` (carry over from previous), surface "previous run crashed" PENDING entry, continue.
+- `RUN_LOCK_ACQUIRED` → proceed.
+
+**Cleanup**: Phase 5 explicitly removes `state/.run.pid`. If the orchestrator itself crashes between Phase 0 and Phase 5, the next run sees a stale pidfile and recovers.
+
+Note: the agent's Bash calls each spawn a fresh shell. The pidfile (`$$` written at acquire time) is the PID of *that* shell, not the orchestrator's. That's fine — the next run's `kill -0` check will see that shell is gone (because the orchestrator's overall run finished or crashed, and any leftover shell exited).
+
+For robustness against a coincident PID reuse, we also write a timestamp inside the pidfile and treat it as stale if older than 4 hours (longer than any realistic run including 90-min budget + 30-min image download).
+
+```bash
+echo "$$ $(date +%s)" > "$PIDFILE"
+# On check:
+NOW=$(date +%s)
+if [ -f "$PIDFILE" ]; then
+  read -r OLDPID OLDTS < "$PIDFILE"
+  if [ -n "$OLDPID" ] && [ -n "$OLDTS" ] && \
+     kill -0 "$OLDPID" 2>/dev/null && \
+     [ $((NOW - OLDTS)) -lt 14400 ]; then
+    echo "RUN_LOCK_HELD pid=$OLDPID age=$((NOW - OLDTS))s"
+    exit 0
+  fi
+fi
+```
 
 ## Phase 1 — Pre-flight (doctor)
 
@@ -173,15 +204,24 @@ Health checks: 1 (sudo/sle-16 PASS, via fallback to Leap 16)
 Pending human action: 2 (see PENDING_REVIEW.md)
 ```
 
-## Phase 5 — Persist state
+## Phase 5 — Persist state + release lock
 
 ```python
 from orchestrator.state_schema import save_state
 state["last_run_completed_at"] = datetime.now(timezone.utc).isoformat()
+state["last_run_aborted"] = False
 save_state("state/.lsr-maintainer-state.json", state)
 ```
 
-Save is atomic (temp file + rename) per `state_schema.py`. The flock from Phase 0 is released by the trap.
+Save is atomic (temp file + rename) per `state_schema.py`.
+
+Then remove the pidfile so the next run can acquire:
+
+```bash
+rm -f state/.run.pid
+```
+
+If any earlier Phase aborted with a fatal error, the orchestrator should still try to do these cleanups before exiting — otherwise the next run sees a stale pidfile and processes it. The pidfile timestamp guard (4-hour staleness in Phase 0) is the safety net when cleanup fails entirely.
 
 ## Failure modes the orchestrator must handle gracefully
 
