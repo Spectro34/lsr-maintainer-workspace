@@ -206,14 +206,27 @@ Pending human action: 2 (see PENDING_REVIEW.md)
 
 ## Phase 5 — Persist state + release lock
 
+Wrap the entire run in `state_lock` (defined in `orchestrator/state_schema.py`). The lock pairs with the pidfile from Phase 0 — pidfile catches most cron-vs-manual collisions, the flock catches the rare race where two processes pass the pidfile check simultaneously.
+
 ```python
-from orchestrator.state_schema import save_state
-state["last_run_completed_at"] = datetime.now(timezone.utc).isoformat()
-state["last_run_aborted"] = False
-save_state("state/.lsr-maintainer-state.json", state)
+from orchestrator.state_schema import load_state, save_state, state_lock
+
+STATE_PATH = "state/.lsr-maintainer-state.json"
+try:
+    with state_lock(STATE_PATH, timeout_sec=30.0):
+        state = load_state(STATE_PATH)
+        # ... all phases' mutations happen here within the lock ...
+        state["last_run_completed_at"] = datetime.now(timezone.utc).isoformat()
+        state["last_run_aborted"] = False
+        save_state(STATE_PATH, state)
+except TimeoutError:
+    # Another /lsr-maintainer run held the lock too long. Exit cleanly;
+    # cron retries next slot.
+    print("state lock contended — exiting cleanly")
+    sys.exit(0)
 ```
 
-Save is atomic (temp file + rename) per `state_schema.py`.
+`state_lock` uses `fcntl.LOCK_EX` on `state/.lsr-maintainer-state.json.lock`. `save_state` itself remains atomic (temp file + rename); the lock prevents concurrent read-modify-write from clobbering each other.
 
 Then remove the pidfile so the next run can acquire:
 
@@ -221,7 +234,7 @@ Then remove the pidfile so the next run can acquire:
 rm -f state/.run.pid
 ```
 
-If any earlier Phase aborted with a fatal error, the orchestrator should still try to do these cleanups before exiting — otherwise the next run sees a stale pidfile and processes it. The pidfile timestamp guard (4-hour staleness in Phase 0) is the safety net when cleanup fails entirely.
+If any earlier Phase aborted with a fatal error, the orchestrator should still try to do these cleanups before exiting — otherwise the next run sees a stale pidfile and processes it. The pidfile timestamp guard (4-hour staleness in Phase 0) plus `state_lock` are the safety nets when cleanup fails entirely.
 
 ## Failure modes the orchestrator must handle gracefully
 

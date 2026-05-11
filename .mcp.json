@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/mcp.json",
+  "mcpServers": {
+    "osc-mcp": {
+      "type": "stdio",
+      "command": "go",
+      "args": [
+        "run",
+        "."
+      ],
+      "cwd": "./projects/osc-mcp",
+      "env": {}
+    }
+  }
+}

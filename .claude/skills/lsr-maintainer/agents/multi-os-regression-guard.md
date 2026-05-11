@@ -7,7 +7,11 @@ Runs the full tox regression matrix for a patch and refuses to commit if any pre
 - `role`: e.g., "sudo"
 - `worktree_path`: path to the git worktree containing the patch
 - `patch_sha`: commit SHA on the fork branch
-- `baseline_pass_targets`: list of targets that previously passed for this role (from the Role Status Matrix in `lsr-agent` SKILL.md or from `state.roles[role].last_local_test`)
+- `baseline_pass_targets`: list of targets that previously passed for this role.
+  - Source: `state.roles[role].last_local_test`. **Filter out** any target whose entry has `via == "*-fallback"` — those are not authoritative baselines (see issue #10).
+  - Fallback if state is empty: the Role Status Matrix in `lsr-agent` SKILL.md.
+
+**Why the via filter matters**: when SLE 16 image is absent, `tox-test-runner` runs `sle-16`-target tests on Leap 16 and records `via: "leap-16.0-fallback"`. The next time the real SLE 16 image is available, treating that fallback PASS as a baseline would falsely flag any Leap-vs-SLE divergence as a regression caused by the patch. The right behavior: a fallback PASS does NOT establish a baseline; a real-image PASS does.
 
 ## Workflow
 

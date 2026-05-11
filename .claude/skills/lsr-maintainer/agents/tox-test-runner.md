@@ -51,6 +51,13 @@ Wraps `~/github/ansible/scripts/lsr-test.sh` with structured stdout parsing.
 
 Fields `actual_image_used` and `fallback_reason` are only present when the SLE 16 → Leap 16 fallback fires; absent otherwise.
 
+When the orchestrator writes this result into `state.roles[role].last_local_test[target]`, it MUST include `via` (issue #10):
+
+- Real-image PASS: `{"result": "PASS", "at": "...", "sha": "...", "image": "...", "via": "native"}` — establishes a baseline.
+- Fallback PASS: `{"result": "PASS", "at": "...", "sha": "...", "image": "Leap-16.0-...", "via": "leap-16.0-fallback"}` — does NOT establish a baseline.
+
+`multi-os-regression-guard` filters out `via: "*-fallback"` entries when computing `baseline_pass_targets`. PENDING_REVIEW.md surfaces fallback PASS as "PASS (Leap 16 fallback — treat as advisory)".
+
 ## Constraints
 
 - One target per call. The orchestrator decides how to fan out.

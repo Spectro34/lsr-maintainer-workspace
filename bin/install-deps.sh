@@ -17,6 +17,7 @@ err()  { printf '\033[31mERR \033[0m %s\n' "$*"; }
 # --- 1. dirs ---
 DIRS=(
   "$HOME/.cache/lsr-maintainer"
+  "$HOME/.claude/obs-packages/context"
   "$HOME/github/ansible/upstream"
   "$HOME/github/ansible/testing"
   "$HOME/github/ansible/scripts"
@@ -75,14 +76,25 @@ if has_image_for "Leap-16.0-Minimal-VM*.x86_64*Cloud*.qcow2"; then
 else
   URL="https://download.opensuse.org/distribution/leap/16.0/appliances/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2"
   OUT="$ISO_DIR/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2"
-  if [[ "${LSR_NO_AUTO_DOWNLOAD:-0}" == "1" ]]; then
+  # 7-day guard: if a stub file exists touched within 7 days, don't redownload.
+  # Prevents nightly cron from re-pulling 330 MB if the file was transiently
+  # removed by an admin.
+  STUB_MARKER="$ISO_DIR/.leap-16.0-download-attempted"
+  if [[ -f "$STUB_MARKER" ]] && [[ -n "$(find "$STUB_MARKER" -mtime -7 2>/dev/null)" ]]; then
+    warn "Leap 16.0 image missing but last download attempt was <7 days ago; skipping."
+    warn "Force retry: rm $STUB_MARKER"
+  elif [[ "${LSR_NO_AUTO_DOWNLOAD:-0}" == "1" ]]; then
     warn "Leap 16.0 image missing; LSR_NO_AUTO_DOWNLOAD=1 set — skipping."
   elif command -v curl >/dev/null 2>&1; then
     warn "Leap 16.0 image missing — downloading from openSUSE (~330 MB)..."
-    if curl -fL --progress-bar -o "$OUT" "$URL"; then
+    touch "$STUB_MARKER"
+    # --no-progress-meter and --show-error keep the cron log clean
+    # (no carriage-return-rich control sequences from --progress-bar).
+    if curl -fL --no-progress-meter --show-error -o "$OUT" "$URL"; then
       ok "downloaded: $(basename "$OUT")"
+      rm -f "$STUB_MARKER"  # success — clear guard so next legit missing triggers retry
     else
-      warn "Download failed — agent will retry next run."
+      warn "Download failed — agent will retry after 7 days (or remove $STUB_MARKER)."
       rm -f "$OUT" 2>/dev/null
     fi
   else

@@ -3,9 +3,22 @@
 Pure-stdlib (no Pydantic dependency) — the orchestrator's hosts may not have
 extra Python packages installed. JSON schema is enforced by load_state() which
 fills in defaults for missing fields.
+
+Concurrency: load_state + mutate + save_state runs are NOT atomic on their own.
+Concurrent `claude -p` invocations (e.g. cron firing while user runs `make run`)
+can race: both load, both mutate, both save — the second `os.replace` wins,
+silently dropping the first's queue mutations.
+
+Solution: wrap load→mutate→save blocks with `with state_lock("path"):` which
+acquires an exclusive `fcntl.flock` on a sibling `.lock` file. The orchestrator
+uses this around its entire run; the lock is released on context exit.
+
+Self-test verifies atomicity. See workflow-run.md Phase 0 + Phase 5 for usage.
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import tempfile
@@ -13,6 +26,37 @@ from datetime import datetime, timezone
 from typing import Any
 
 STATE_VERSION = 1
+
+
+@contextlib.contextmanager
+def state_lock(state_path: str, timeout_sec: float = 30.0):
+    """Exclusive advisory lock around a state-file read-modify-write block.
+
+    Acquires fcntl.LOCK_EX on `<state_path>.lock`. Blocks up to `timeout_sec`
+    if another process holds it. Raises TimeoutError on timeout (the caller
+    should treat that as "another run is in progress; exit cleanly").
+    """
+    lock_path = state_path + ".lock"
+    os.makedirs(os.path.dirname(os.path.abspath(state_path)) or ".", exist_ok=True)
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        # Non-blocking attempt with retry loop so we honor the timeout.
+        import time
+        deadline = time.monotonic() + timeout_sec
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"state lock contended at {lock_path}")
+                time.sleep(0.1)
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
 
 
 def _now() -> str:
@@ -246,5 +290,19 @@ if __name__ == "__main__":
     assert s3["roles"]["sudo"]["fork_repo"] == "bob/sudo", "fork_repo must follow identity change"
     assert s3["roles"]["sudo"]["pr_cursors"] == {}, "PR cursors must reset on identity change"
     assert s3["roles"]["sudo"]["patched_files"] == ["library/scan_sudoers.py"], "patched_files preserved"
+
+    # state_lock concurrency: second acquisition with short timeout must fail.
+    lockp = os.path.join(tmpdir, "concurrent.json")
+    with state_lock(lockp, timeout_sec=1.0):
+        # Another acquisition must time out.
+        try:
+            with state_lock(lockp, timeout_sec=0.2):
+                raise AssertionError("nested lock should have timed out")
+        except TimeoutError:
+            pass
+
+    # After release, lock is reacquirable.
+    with state_lock(lockp, timeout_sec=1.0):
+        pass
 
     print("OK", p)
