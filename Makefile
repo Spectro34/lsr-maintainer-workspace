@@ -109,6 +109,10 @@ test-orchestrator: ## Run orchestrator Python self-tests (config + state + manif
 	@python3 -m orchestrator.anomaly
 	@echo "== orchestrator/notify self-test =="
 	@python3 -m orchestrator.notify
+	@echo "== orchestrator/sanitize self-test =="
+	@python3 -m orchestrator.sanitize
+	@echo "== orchestrator/cost_meter self-test =="
+	@python3 -m orchestrator.cost_meter
 	@echo "== orchestrator/manifest_parse smoke (requires real spec) =="
 	@spec=$$(find $$HOME/github/ansible -name 'ansible-linux-system-roles.spec' 2>/dev/null | head -1); \
 	if [ -n "$$spec" ]; then \

@@ -151,9 +151,16 @@ For each item popped:
 ```
 git worktree add state/worktrees/<role>-pr<N>/ <fork-branch>
    ↓
+SANITIZE external content before passing to sub-agents (issue #12):
+   from orchestrator.sanitize import wrap_untrusted
+   wrapped_comments = [
+       wrap_untrusted(c, source=f"PR comment by @{c['author']}")
+       for c in review_comments
+   ]
+   ↓
 Spawn bug-fix-implementer with:
    role, worktree_path, task_kind="address_review",
-   payload={review_comments, reviewer, pr_number}
+   payload={review_comments=wrapped_comments, reviewer, pr_number}
    ↓
 Returns commit_sha + diagnosis (or commit_sha=null=needs human triage)
    ↓
