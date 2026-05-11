@@ -58,6 +58,47 @@ else
   warn "tox-lsr venv missing — bootstrap-runner agent will set it up on next run."
 fi
 
+# --- 4b. Leap 16 image (auto-download from download.opensuse.org if missing) ---
+ISO_DIR="$HOME/iso"
+mkdir -p "$ISO_DIR"
+
+has_image_for() {
+  local pattern="$1"
+  for f in $ISO_DIR/$pattern; do
+    [[ -f "$f" ]] && return 0
+  done
+  return 1
+}
+
+if has_image_for "Leap-16.0-Minimal-VM*.x86_64*Cloud*.qcow2"; then
+  ok "Leap 16.0 image present"
+else
+  URL="https://download.opensuse.org/distribution/leap/16.0/appliances/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2"
+  OUT="$ISO_DIR/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2"
+  if [[ "${LSR_NO_AUTO_DOWNLOAD:-0}" == "1" ]]; then
+    warn "Leap 16.0 image missing; LSR_NO_AUTO_DOWNLOAD=1 set — skipping."
+  elif command -v curl >/dev/null 2>&1; then
+    warn "Leap 16.0 image missing — downloading from openSUSE (~330 MB)..."
+    if curl -fL --progress-bar -o "$OUT" "$URL"; then
+      ok "downloaded: $(basename "$OUT")"
+    else
+      warn "Download failed — agent will retry next run."
+      rm -f "$OUT" 2>/dev/null
+    fi
+  else
+    warn "curl unavailable; install curl to enable auto-download of Leap 16."
+  fi
+fi
+
+# Report SLE 16 fallback policy
+if ! has_image_for "SLES-16.0-*Minimal-VM*.x86_64*.qcow2"; then
+  if has_image_for "Leap-16.0-Minimal-VM*.x86_64*Cloud*.qcow2"; then
+    ok "SLE 16 image absent — sle16-target tests will use Leap 16 fallback"
+  else
+    warn "SLE 16 image absent AND Leap 16 fallback unavailable — sle16-target tests cannot run"
+  fi
+fi
+
 # --- 5. .gitignore for workspace's own ignored-state ---
 if ! grep -q '^state/' .gitignore 2>/dev/null; then
   warn ".gitignore should ignore state/* — please verify."

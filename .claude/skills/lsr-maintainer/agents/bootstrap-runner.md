@@ -16,7 +16,21 @@ Idempotent host preparation. Safe to run repeatedly. Designed for `/lsr-maintain
    - Create venv: `python3 -m venv ~/github/ansible/testing/tox-lsr-venv`
    - Install: `~/github/ansible/testing/tox-lsr-venv/bin/pip install tox-lsr` (pin to the version in `references/tox-lsr-pin.txt` if present).
    - Run `~/github/ansible/scripts/patch-tox-lsr.sh` (clone the host-scripts first if missing — `git clone <eventual-repo-url> ~/github/ansible/scripts`).
-6. **QEMU images** — for each target the agent will test against, check `~/iso/<image>` presence. Never download (multi-GB). Surface missing as PENDING with the source URL.
+6. **QEMU images** — detect by glob pattern (target → glob, see `tox-test-runner.md`):
+   - `sle-16`     → `SLES-16.0-*Minimal-VM*.x86_64*.qcow2`
+   - `leap-16.0`  → `Leap-16.0-Minimal-VM*.x86_64*Cloud*.qcow2`
+   - `sle-15-sp7` → `SLES15-SP7-Minimal-VM*.x86_64*.qcow2`
+   - `leap-15.6`  → `openSUSE-Leap-15.6*.x86_64*.qcow2` or `Leap-15.6-Minimal-VM*.x86_64*.qcow2`
+
+   **Download policy** (per image source):
+   - SLES-* images: license-restricted (SUSE Customer Center). **Never download.** Surface PENDING with the SCC URL.
+   - Leap-* images: openSUSE, freely redistributable from `download.opensuse.org`. **OK to download** if missing AND the user has not opted out (check `state/.bootstrap-state.json::config.auto_download_leap == false` to opt out; default is true).
+
+   Canonical Leap 16 URL:
+   `https://download.opensuse.org/distribution/leap/16.0/appliances/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2`
+   (~330 MB; uses `curl -fL --progress-bar` so the cron log shows progress.)
+
+   **SLE 16 → Leap 16 fallback**: if `sle-16` glob has no match but `leap-16.0` does, mark `components_ready.qemu_images.sle-16` as `"fallback_to_leap-16.0"` (truthy). The `tox-test-runner` honors this fallback per `tox-test-runner.md` §2.
 7. **Auth** — run `gh auth status` and `osc whois` non-interactively. Token/password not printed. If either fails, emit PENDING "Run ./bin/setup.sh to re-auth."
 8. **Cron** — check if the cron entry is registered (`crontab -l | grep -q "# lsr-maintainer-workspace"`). If not, emit PENDING "Run `make install-cron` to schedule nightly runs."
 9. **Write bootstrap state** — `state/.bootstrap-state.json` with `components_ready` map.
@@ -45,7 +59,7 @@ Idempotent host preparation. Safe to run repeatedly. Designed for `/lsr-maintain
 ## Constraints
 
 - **Never run sudo or package managers** (blocked by hooks anyway).
-- **Never download QEMU images** (too large, license-restricted on SLE).
+- **Never download license-restricted images** (SLES-*). Always allowed: openSUSE Leap-* from `download.opensuse.org` (free + redistributable).
 - **Never modify auth state** — only check it.
-- Idempotent: running multiple times produces the same components_ready and pending_actions.
-- Time budget: 60 seconds.
+- Idempotent: running multiple times produces the same components_ready and pending_actions. A Leap download attempt that fails (network down) does not change state — just emits PENDING.
+- Time budget: 60 seconds for the checks; if a Leap image download is needed, that's a separate phase with its own 5-minute budget (Leap 16 Cloud variant is ~330 MB, ~30s on a fast connection).

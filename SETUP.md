@@ -80,16 +80,32 @@ osc ls home:$(osc whois | awk '{print $1}')
 
 ## 4. QEMU images
 
-The agent runs tox-LSR tests against SUSE images at `~/iso/`. Download these manually (the agent will not download GB-scale ISOs autonomously):
+The agent runs tox-LSR tests against SUSE/openSUSE images at `~/iso/`. The agent detects images by **glob pattern**, so variants are fine (e.g., `-20G`, `-GM`, `Full-VM` vs `Minimal-VM`).
 
-| Image | Where to get it |
-|---|---|
-| `SLES-16.0-Minimal-VM.x86_64-Cloud-GM.qcow2` | SUSE Customer Center |
-| `SLES15-SP7-Minimal-VM.x86_64-Cloud-GM.qcow2` | SUSE Customer Center |
-| `openSUSE-Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2` | https://get.opensuse.org/ |
-| `openSUSE-Leap-15.6-Minimal-VM.x86_64-Cloud.qcow2` | https://get.opensuse.org/ |
+**Per-target glob patterns:**
 
-Place them at `~/iso/`. The agent's `doctor` command will report which are present.
+| Target | Glob | Source |
+|---|---|---|
+| `sle-16` | `SLES-16.0-*Minimal-VM*.x86_64*.qcow2` | SUSE Customer Center (license required) |
+| `leap-16.0` | `Leap-16.0-Minimal-VM*.x86_64*Cloud*.qcow2` | `download.opensuse.org` (free) |
+| `sle-15-sp7` | `SLES15-SP7-Minimal-VM*.x86_64*.qcow2` | SUSE Customer Center |
+| `leap-15.6` | `openSUSE-Leap-15.6*.x86_64*.qcow2` or `Leap-15.6-Minimal-VM*.x86_64*.qcow2` | `download.opensuse.org` |
+
+**SLE 16 → Leap 16 fallback**: if you don't have the SLE 16 image (it's license-restricted, not freely redistributable), the agent transparently runs `sle-16`-target tests against Leap 16. ansible-core version is the same (2.20); `os_family` is `Suse` for both. For LSR compatibility testing this is close enough — package vendor strings differ but the load-bearing pieces (Python version, NetworkManager, sudo path, syslog setup) are identical.
+
+**Downloading Leap 16 (the agent does this automatically when missing):**
+
+```bash
+curl -fL --progress-bar \
+  -o ~/iso/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2 \
+  https://download.opensuse.org/distribution/leap/16.0/appliances/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2
+```
+
+Size: ~330 MB. `./bin/setup.sh` offers to do this interactively; `bootstrap-runner` does it autonomously during a scheduled run if the workspace is configured with `state/.bootstrap-state.json::config.auto_download_leap == true` (the default).
+
+**To opt out of auto-download** (e.g., metered connection): edit `state/.bootstrap-state.json` and set `"config": {"auto_download_leap": false}` before the first scheduled run.
+
+**License-restricted images (SLE 15 SP7, SLE 16, SLE 16 Full)**: the agent will never download these. If you have credentials for SUSE Customer Center, download manually and place at `~/iso/`. The agent's `doctor` command reports which are present and tells you which targets will run.
 
 ## 5. Run setup.sh
 
