@@ -57,6 +57,18 @@ make pending     # less state/PENDING_REVIEW.md
 
 Anything ready to ship will be in the "Ready to ship" section with a one-line summary; you `gh pr create` it yourself. Anything that needs human triage is under "Manual triage needed."
 
+Other useful one-liners:
+
+```bash
+make doctor                  # fast bash posture check (<1s; suitable for cron pre-flight)
+make doctor-llm              # LLM-driven verbose check (slower, narrative)
+make dry-run                 # exercise the queue-refresh pipeline; write nothing
+make run                     # full nightly path on demand
+make enable-role ROLE=squid  # enqueue a new-role port
+make status-all              # workspace + submodule state
+make test                    # 169 hook tests + orchestrator self-tests
+```
+
 To stop the agent: `make uninstall` removes the cron entry and leaves everything else intact.
 
 ## Features

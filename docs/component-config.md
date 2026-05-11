@@ -13,7 +13,11 @@ The workspace is **identity-agnostic** until `./bin/setup.sh` runs. After init, 
     "fork_branch":     "fix/suse-support",
     "upstream_orgs":   ["linux-system-roles"],
     "community_orgs":  ["geerlingguy", "robertdebock", "bertvv", "mrlesmithjr"],
-    "suse_org":        "SUSE"
+    "suse_org":        "SUSE",
+    "tracked_extra_roles": [
+      "sudo", "kernel_settings", "ansible-sshd", "network", "logging",
+      "metrics", "postgresql", "ad_integration"
+    ]
   },
   "obs": {
     "user":                    "alice123",
@@ -50,6 +54,21 @@ The workspace is **identity-agnostic** until `./bin/setup.sh` runs. After init, 
   }
 }
 ```
+
+## Fields you'll likely customize
+
+Most of the defaults are sensible, but these are the typical overrides:
+
+| Field | Why customize |
+|---|---|
+| `github.tracked_extra_roles` | Roles you maintain on personal forks that AREN'T in the OBS package manifest. Defaults to the canonical 8 (sudo, kernel_settings, ansible-sshd, network, logging, metrics, postgresql, ad_integration). Add hackweek/community roles here (squid, apache, nfs, samba, kea-dhcp, bind, snapper, tftpd). |
+| `obs.source_project` | Default `devel:sap:ansible`. Change if you maintain the package in a different devel project. |
+| `obs.package_name` | Default `ansible-linux-system-roles`. |
+| `schedule.cron_time` | Default `7 3 * * *` (03:07 local). `install-cron.sh` reads this if present. |
+| `paths.iso_dir` | Default `~/iso`. Change if QEMU images live elsewhere. |
+| `test_targets.fallback` | Map target → fallback target when image is missing. Default `{sle-16: leap-16.0}`. |
+| `test_targets.auto_download.leap-16.0` | URL and size_mb for auto-fetch. Set to `null` to disable. |
+| `review_board.max_concern_iterations` | Default 2. How many re-iterations a `bug-fix-implementer` patch may go through before falling out to manual triage. |
 
 ## How identity is detected
 

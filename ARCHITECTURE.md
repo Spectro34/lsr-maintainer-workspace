@@ -90,7 +90,13 @@ Review fires **before** tox tests (cheap reviewers fail fast). Regression matrix
 
 ## State
 
-Single JSON file at `state/.lsr-maintainer-state.json`. Atomic writes (temp file + rename). Schema versioned. See [docs/component-state-file.md](docs/component-state-file.md).
+Single JSON file at `state/.lsr-maintainer-state.json`. Atomic writes (temp file + rename). Schema versioned.
+
+Concurrency: every `/lsr-maintainer run` wraps its full read-modify-write in `state_lock` (an `fcntl.LOCK_EX` advisory lock on `<state>.lock`). Cron-vs-manual collisions are serialized; the second runner times out after 30s and exits cleanly. Paired with the run-pidfile in workflow-run.md Phase 0 for defense in depth.
+
+Identity is NOT in state — it's in `state/config.json` (separate file, also gitignored). See [docs/component-config.md](docs/component-config.md) for the config schema and detection flow.
+
+See [docs/component-state-file.md](docs/component-state-file.md).
 
 ## Security boundary
 
@@ -106,7 +112,8 @@ See [SECURITY.md](SECURITY.md) and [docs/component-hooks.md](docs/component-hook
 
 ## Schedule and lifecycle
 
-- **Trigger**: cron, nightly at 03:07 local. `bin/lsr-maintainer-run.sh` is the entry point.
-- **Doctor pre-flight**: every run starts with a posture check; aborts cleanly if auth or tox venv is broken.
-- **Time budget**: default 90 min per run; per-item soft caps (15 min PR-feedback, 60 min new-role enablement, 5 min status).
-- **Resumability**: state is the source of truth across runs. Each run reads `last_run_completed_at`, the priority queue, per-PR cursors, per-role tested-SHAs. A missed run picks up where the last successful one left off.
+- **Trigger**: cron, nightly at `config.schedule.cron_time` (default `7 3 * * *`, 03:07 local). `install-cron.sh` emits a `CRON_TZ=` line derived from `timedatectl` so the entry fires at LOCAL time even when systemd-cron defaults to UTC. Override via `LSR_CRON_TIME` / `LSR_CRON_TZ` envs.
+- **Doctor pre-flight**: every run starts with `bash bin/doctor.sh` (10 checks in pure bash, sub-second). Aborts cleanly if any red item is present. `bin/lsr-maintainer-run.sh` is the actual entry point.
+- **Time budget**: default 90 min per run from `config.schedule.time_budget_minutes`; per-item soft caps from `config.schedule.per_item_budgets`.
+- **Resumability**: state is the source of truth across runs. Each run reads `last_run_completed_at`, `last_run_aborted`, the priority queue, per-PR cursors, per-role tested-SHAs. A missed run picks up where the last successful one left off.
+- **Identity**: read from `state/config.json` at the start of every run. Pre-init (empty `github.user`) makes all hooks treat every write as upstream — uninitialized = safest state.

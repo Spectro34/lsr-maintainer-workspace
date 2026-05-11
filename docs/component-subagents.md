@@ -8,7 +8,7 @@ The orchestrator (`.claude/skills/lsr-maintainer/SKILL.md`) spawns these via the
 |---|---|---|---|---|
 | `pr-status-poller` | read-only | open-PR list, cursors | events + cursor updates | 60s |
 | `upstream-drift-watcher` | read-only | role list, last-seen-SHA | drift events | 90s |
-| `manifest-syncer` | read-only | spec file path | managed_roles[], manifest events | 15s |
+| `manifest-syncer` | read-only | spec file path | managed_roles[] (OBS-shipped), manifest events | 15s |
 | `tox-test-runner` | write (local logs) | role + target | PASS/FAIL/N/A + log path | 30min/test |
 | `multi-os-regression-guard` | orchestrator | role + worktree + baseline | per-target verdict | 30–60min |
 | `bug-fix-implementer` | write (worktree, local commit) | role + worktree + task | commit SHA + diagnosis | 10min |
@@ -44,6 +44,17 @@ See `SKILL.md` §"Smart sub-agent routing policy". Summary:
 ## Per-item time budgets
 
 When a sub-agent exceeds its budget, the orchestrator aborts it, marks the item "needs human" in PENDING_REVIEW.md, and proceeds. This prevents one stuck task from burning the nightly window.
+
+## Watched-role set
+
+`pr-status-poller` and `upstream-drift-watcher` iterate over the UNION of:
+
+- `state.obs.managed_roles[].name` — roles shipped by the OBS package (populated by `manifest-syncer` from the spec)
+- `state/config.json::github.tracked_extra_roles` — fork-only roles the user maintains beyond what OBS ships
+
+The orchestrator seeds `state.roles[]` from this union via `orchestrator.state_schema.seed_roles_from_manifest(state, managed_roles, github_user, fork_branch, tracked_extra_roles)`. Edit `config.json` to add/remove roles the agent watches.
+
+Defaults for `tracked_extra_roles`: `sudo, kernel_settings, ansible-sshd, network, logging, metrics, postgresql, ad_integration` (the canonical fork-only roles per `lsr-agent` Role Status Matrix).
 
 ## Verdict-merge for the review board
 

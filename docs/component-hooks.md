@@ -79,7 +79,7 @@ Output:
   ok   DENY  gh pr create against upstream
   ...
 ============================================
-  PASS: 46    FAIL: 0
+  PASS: 169   FAIL: 0
 ============================================
 ```
 

@@ -24,6 +24,20 @@ if [[ ! -x "$CLAUDE_BIN" ]]; then
   exit 1
 fi
 
+# Pre-flight via bin/doctor.sh. Refuses to fire the (expensive) claude -p
+# run when posture is broken — e.g., no state/config.json, gh/osc auth
+# dead, hook test harness regressing. Doctor exits 1 on critical red.
+DOCTOR_LOG="$LOG_DIR/${ts}.doctor.txt"
+if ! bash bin/doctor.sh > "$DOCTOR_LOG" 2>&1; then
+  {
+    echo "lsr-maintainer run @ $(date -Iseconds) — ABORTED (doctor red)"
+    echo "doctor log: $DOCTOR_LOG"
+    echo ""
+    cat "$DOCTOR_LOG"
+  } > "$SUMMARY"
+  exit 1
+fi
+
 # Run.
 "$CLAUDE_BIN" \
   -p "/lsr-maintainer run" \
