@@ -355,16 +355,36 @@ while IFS= read -r sub; do
         *" lock"*|*" unlock"*)
           emit_block "osc lock/unlock is forbidden (affects shared state)." "$sub" ;;
         *" ci "*|*" ci"*|*" commit "*|*" commit"*)
-          # Commits are fine inside home:* but block elsewhere. Project name
-          # is usually the cwd's parent dir under an osc checkout.
+          # Commits are fine inside home:* but block elsewhere.
           if [[ "$args" =~ -p[[:space:]]+([^[:space:]]+) ]]; then
             proj="${BASH_REMATCH[1]}"
             if osc_proj_is_upstream "$proj"; then
               emit_block "osc commit to $proj is forbidden — only ${ALLOW_OSC_PREFIX}* allowed." "$sub"
             fi
+          else
+            # No -p flag — verify cwd is an osc checkout under the personal
+            # namespace by walking up to find a `.osc/_project` file. Closes
+            # issue #15: a sub-agent's cd into an upstream checkout + osc ci
+            # would otherwise bypass the project check.
+            dir="$(pwd)"
+            project_file=""
+            while [[ "$dir" != "/" ]]; do
+              if [[ -f "$dir/.osc/_project" ]]; then
+                project_file="$dir/.osc/_project"; break
+              fi
+              dir="$(dirname "$dir")"
+            done
+            if [[ -z "$project_file" ]]; then
+              emit_block "osc commit without -p AND no .osc/_project in cwd ancestry — refusing." "$sub"
+            fi
+            proj="$(head -1 "$project_file" 2>/dev/null | tr -d '[:space:]')"
+            if [[ -z "$proj" ]]; then
+              emit_block "osc commit without -p, .osc/_project found but empty — refusing." "$sub"
+            fi
+            if osc_proj_is_upstream "$proj"; then
+              emit_block "osc commit (cwd-resolved) to $proj is forbidden — only ${ALLOW_OSC_PREFIX}* allowed." "$sub"
+            fi
           fi
-          # If no -p, fall through; relies on cwd. Acceptable risk: hook
-          # cannot read cwd without forking osc itself.
           ;;
       esac
       ;;

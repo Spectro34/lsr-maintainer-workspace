@@ -178,6 +178,69 @@ export LSR_GIT_NAME="$GIT_NAME"
 export LSR_WORKSPACE="$WORKSPACE"
 export LSR_MISSING_IMG_COUNT="${#MISSING_IMG[@]}"
 
+# Identity-change guard (issue #14 / P-M3): if existing config has a
+# different gh/obs user than what we just detected, refuse to silently
+# overwrite. Operator must confirm interactively. Under cron (no TTY)
+# we fail hard.
+existing_gh="$(python3 -c '
+import os, sys, json
+ws = os.environ["LSR_WORKSPACE"]
+sys.path.insert(0, ws)
+from orchestrator.config import load_config
+print(load_config(os.path.join(ws, "state/config.json"))["github"]["user"])
+')"
+existing_obs="$(python3 -c '
+import os, sys, json
+ws = os.environ["LSR_WORKSPACE"]
+sys.path.insert(0, ws)
+from orchestrator.config import load_config
+print(load_config(os.path.join(ws, "state/config.json"))["obs"]["user"])
+')"
+
+if [[ -n "$existing_gh" && "$existing_gh" != "$GH_USER_JSON" ]]; then
+  warn "Identity migration detected:"
+  warn "  state/config.json has github.user='$existing_gh'"
+  warn "  but gh api user returned '$GH_USER_JSON'"
+  if [[ -t 0 ]]; then
+    read -rp "Rewrite identity? [y/N] " resp
+    [[ "$resp" =~ ^[Yy] ]] || { err "aborted by user"; exit 1; }
+    # Clear existing.github.user via python so init_from_identity fills new.
+    python3 - <<'CLEAR'
+import os, sys, json
+ws = os.environ["LSR_WORKSPACE"]
+sys.path.insert(0, ws)
+from orchestrator.config import load_config, save_config
+cfg = load_config(os.path.join(ws, "state/config.json"))
+cfg["github"]["user"] = ""
+save_config(os.path.join(ws, "state/config.json"), cfg)
+CLEAR
+  else
+    err "Identity change requires interactive confirmation; running under cron/no-TTY. Aborting."
+    exit 1
+  fi
+fi
+
+if [[ -n "$existing_obs" && "$existing_obs" != "$OBS_USER_JSON" ]]; then
+  warn "OBS identity migration: state has '$existing_obs', osc whois returned '$OBS_USER_JSON'"
+  if [[ -t 0 ]]; then
+    read -rp "Rewrite OBS identity? [y/N] " resp
+    [[ "$resp" =~ ^[Yy] ]] || { err "aborted by user"; exit 1; }
+    python3 - <<'CLEAR'
+import os, sys, json
+ws = os.environ["LSR_WORKSPACE"]
+sys.path.insert(0, ws)
+from orchestrator.config import load_config, save_config
+cfg = load_config(os.path.join(ws, "state/config.json"))
+cfg["obs"]["user"] = ""
+cfg["obs"]["personal_project_root"] = ""
+save_config(os.path.join(ws, "state/config.json"), cfg)
+CLEAR
+  else
+    err "OBS identity change requires interactive confirmation. Aborting."
+    exit 1
+  fi
+fi
+
 python3 - <<'PY'
 import json, os, sys
 ws = os.environ["LSR_WORKSPACE"]

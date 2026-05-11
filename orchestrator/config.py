@@ -101,6 +101,26 @@ def default_config() -> dict[str, Any]:
             "max_concern_iterations": 2,
             "concurrent_cap": 6,
         },
+        # Anomaly detection (issue #17). Reads from state/metrics-history.jsonl.
+        # Per-metric override: e.g. `"thresholds": {"commits_pushed": 5.0}` to
+        # require 5σ for that metric.
+        "anomaly": {
+            "enabled": True,
+            "default_sigma": 3.0,
+            "min_samples": 7,        # need N nights of data before flagging
+            "history_days": 14,
+            "thresholds": {},        # per-metric overrides
+            "auto_halt_on_anomaly": False,  # day-1: surface only; flip after calibration
+        },
+        # Out-of-band notifications (issue #18). Disabled by default — set
+        # `backend` to enable. Falls back silently if backend unavailable.
+        "notify": {
+            "backend": "",           # "ntfy" | "email" | "webhook" | ""
+            "events": ["reject", "anomaly", "doctor_red", "halt", "daily_summary"],
+            "ntfy":    {"url": "", "priority": "default"},
+            "email":   {"to": ""},
+            "webhook": {"url": ""},
+        },
     }
 
 
@@ -154,44 +174,90 @@ def save_config(path: str, data: dict[str, Any]) -> None:
         raise
 
 
+_TRUSTED_BIN_DIRS = ("/usr/bin", "/usr/local/bin", "/usr/sbin", "/usr/local/sbin", "/bin", "/sbin")
+
+
+def _trusted_binary(name: str) -> str | None:
+    """Resolve `name` via shutil.which, then refuse it if it's not under
+    a trusted system bindir. Closes the PATH-shim attack class
+    (see issue #21): if `~/.local/bin/gh` shadows the real one, an
+    attacker who can write to the user's local bin would otherwise steal
+    identity at the next setup.sh run.
+
+    Returns the absolute path or None if untrusted/missing.
+    """
+    p = shutil.which(name)
+    if not p:
+        return None
+    # Resolve symlinks one level to catch e.g. /usr/local/bin/gh -> /opt/gh/bin/gh
+    try:
+        real = os.path.realpath(p)
+    except Exception:
+        real = p
+    # Accept if EITHER the symlink-as-found OR the resolved path lives under
+    # a trusted dir. (Some distros ship gh as /usr/bin/gh → /opt/.../gh.)
+    if any(p.startswith(d + "/") for d in _TRUSTED_BIN_DIRS):
+        return p
+    if any(real.startswith(d + "/") for d in _TRUSTED_BIN_DIRS):
+        return p
+    return None
+
+
 def detect_identity() -> dict[str, str]:
     """Run `gh api user` and `osc whois` non-interactively and return what
     they print. Does NOT print tokens — only the public login names.
-    Returns empty strings for any that fail (e.g. unauthenticated)."""
-    out = {"github_user": "", "obs_user": "", "git_email": "", "git_name": ""}
+    Returns empty strings for any that fail (e.g. unauthenticated).
 
-    # GitHub login
-    if shutil.which("gh"):
+    Binaries are resolved via `_trusted_binary` so a PATH-shim earlier in
+    PATH (e.g. `~/.local/bin/gh`) cannot steal identity.
+    """
+    out = {"github_user": "", "obs_user": "", "git_email": "", "git_name": "",
+           "warnings": []}  # operator surfaces these via setup.sh
+
+    gh_bin = _trusted_binary("gh")
+    if gh_bin:
         try:
             r = subprocess.run(
-                ["gh", "api", "user", "--jq", ".login"],
+                [gh_bin, "api", "user", "--jq", ".login"],
                 capture_output=True, text=True, timeout=10,
             )
             if r.returncode == 0:
                 out["github_user"] = r.stdout.strip()
         except Exception:
             pass
+    elif shutil.which("gh"):
+        out["warnings"].append(
+            f"gh found at {shutil.which('gh')} but NOT under a trusted system bindir; "
+            "refusing to use it (PATH-shim defense). Install gh via your package manager."
+        )
 
-    # OBS login
-    if shutil.which("osc"):
+    osc_bin = _trusted_binary("osc")
+    if osc_bin:
         try:
             r = subprocess.run(
-                ["osc", "whois"], capture_output=True, text=True, timeout=10,
+                [osc_bin, "whois"], capture_output=True, text=True, timeout=10,
             )
             if r.returncode == 0:
-                # `osc whois` prints "login (Name <email>)"
                 out["obs_user"] = r.stdout.strip().split()[0] if r.stdout.strip() else ""
         except Exception:
             pass
+    elif shutil.which("osc"):
+        out["warnings"].append(
+            f"osc found at {shutil.which('osc')} but NOT under a trusted system bindir; "
+            "refusing to use it. Install osc via your package manager."
+        )
 
-    # Git author
-    try:
-        r = subprocess.run(["git", "config", "--global", "user.email"], capture_output=True, text=True)
-        out["git_email"] = r.stdout.strip()
-        r = subprocess.run(["git", "config", "--global", "user.name"], capture_output=True, text=True)
-        out["git_name"] = r.stdout.strip()
-    except Exception:
-        pass
+    git_bin = _trusted_binary("git")
+    if git_bin:
+        try:
+            r = subprocess.run([git_bin, "config", "--global", "user.email"],
+                               capture_output=True, text=True)
+            out["git_email"] = r.stdout.strip()
+            r = subprocess.run([git_bin, "config", "--global", "user.name"],
+                               capture_output=True, text=True)
+            out["git_name"] = r.stdout.strip()
+        except Exception:
+            pass
 
     return out
 

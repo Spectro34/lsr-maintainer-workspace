@@ -179,14 +179,66 @@ Delegates to `agents/new-role-enabler.md` workflow. See `workflow-enable-role.md
 
 Pick the role in `state.obs.managed_roles` with the oldest `last_local_test["sle-16"].at` (or `last_local_test["leap-16.0"].at` if SLE 16 unavailable). Run `tox-test-runner` against SLE 16 (or fallback). Update state. No commit, no push.
 
-## Phase 4 — Surface
+## Phase 4 — Surface (anomaly check + notify + PENDING write)
 
 After all queue items processed (or budget exhausted):
+
+### 4a — Compute run metrics + append history
+
+```python
+from orchestrator.anomaly import append_run, check, format_for_pending, METRICS
+
+metrics = {
+    "commits_pushed":            <count from Phase 3>,
+    "prs_addressed":             <count>,
+    "roles_touched":             <count>,
+    "tox_minutes":               <total>,
+    "tokens_input":              <from claude transcript>,
+    "tokens_output":             <from claude transcript>,
+    "pending_entries_created":   <count>,
+    "pending_entries_resolved":  <count>,
+    "obs_builds_run":            <count>,
+    "duration_minutes":          <wall-clock>,
+}
+append_run("state/metrics-history.jsonl", metrics)
+
+if config["anomaly"]["enabled"]:
+    anomalies = check(
+        metrics, "state/metrics-history.jsonl",
+        thresholds=config["anomaly"]["thresholds"],
+        default_sigma=config["anomaly"]["default_sigma"],
+        min_samples=config["anomaly"]["min_samples"],
+    )
+    if anomalies:
+        # Prepend the anomaly section to PENDING_REVIEW.md (top of file).
+        anomaly_block = format_for_pending(anomalies)
+        # Notify (opt-in; silent if backend unconfigured).
+        from orchestrator.notify import notify
+        notify(config, "anomaly", anomaly_block, priority="high")
+        if config["anomaly"]["auto_halt_on_anomaly"]:
+            # Engage the kill switch — next cron tick exits immediately.
+            with open("state/.halt", "w") as f:
+                f.write(f"auto-halted by anomaly check at {now}\n")
+                f.write(anomaly_block)
+```
+
+The orchestrator captures `tokens_input`/`tokens_output` from the stream-json transcript that wraps this run (`bin/lsr-maintainer-run.sh` writes it to `~/.cache/lsr-maintainer/<ts>.jsonl`). For run-time-only metrics (commits_pushed etc.), the orchestrator counts them as it goes and stuffs them into a local dict.
+
+### 4b — Other notifications
+
+The orchestrator calls `notify(config, event, message, priority)` for each notable event encountered in Phase 3:
+
+- `reject` — any review board reject (notify the operator that a fix was attempted and failed)
+- `doctor_red` — if pre-flight surfaced any red item (cron should not normally get this far; doctor exits before claude -p, but a mid-run drift could trigger)
+- `halt` — agent auto-engaged kill switch (anomaly or other auto-halt path)
+- `daily_summary` — every clean run, brief one-line metrics summary
 
 ```python
 from orchestrator.pending_review_render import render
 state["pending_review_count"] = sum(1 for q in state["queue"] if q["priority"] < 9)
 text = render(state)
+if anomaly_block:
+    text = anomaly_block + "\n" + text   # anomaly always TOP of file
 with open("state/PENDING_REVIEW.md", "w") as f:
     f.write(text)
 ```

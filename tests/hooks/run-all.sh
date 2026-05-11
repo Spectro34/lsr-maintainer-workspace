@@ -494,6 +494,34 @@ for entry in "${SELFMOD_ALLOW[@]}"; do
   check "ALLOW $desc" "0" "$code"
 done
 
+# ---- P-M4: osc commit without -p must verify cwd via .osc/_project ----
+echo "== P-M4: osc commit without -p checks cwd's .osc/_project =="
+
+# Create a fake home: checkout (allowed)
+HOME_CO="$(mktemp -d -t lsr-test-home-osc.XXXXXX)"
+mkdir -p "$HOME_CO/.osc"
+echo "home:Spectro34:branches:devel:sap:ansible" > "$HOME_CO/.osc/_project"
+
+# Create a fake upstream checkout (forbidden)
+UP_CO="$(mktemp -d -t lsr-test-up-osc.XXXXXX)"
+mkdir -p "$UP_CO/.osc"
+echo "devel:sap:ansible" > "$UP_CO/.osc/_project"
+
+# osc ci from home: cwd → ALLOW
+code=$(cd "$HOME_CO" && bash "$UPSTREAM" <<<'{"tool_name":"Bash","tool_input":{"command":"osc ci -m hi"}}' >/dev/null 2>&1; echo $?)
+check "ALLOW osc ci in home:* checkout (cwd)" "0" "$code"
+
+# osc ci from upstream cwd → DENY
+code=$(cd "$UP_CO" && bash "$UPSTREAM" <<<'{"tool_name":"Bash","tool_input":{"command":"osc ci -m hi"}}' >/dev/null 2>&1; echo $?)
+check "DENY  osc ci in upstream checkout (cwd)" "2" "$code"
+
+# osc ci from random cwd with no .osc → DENY
+NOOSC="$(mktemp -d -t lsr-test-no-osc.XXXXXX)"
+code=$(cd "$NOOSC" && bash "$UPSTREAM" <<<'{"tool_name":"Bash","tool_input":{"command":"osc ci -m hi"}}' >/dev/null 2>&1; echo $?)
+check "DENY  osc ci in non-osc cwd" "2" "$code"
+
+rm -rf "$HOME_CO" "$UP_CO" "$NOOSC"
+
 # ---- C-PROD-3: gh api -X with lowercase / = forms ----
 echo "== C-PROD-3: gh api -X lowercase/= forms =="
 GHAPI_FORM_DENY=(

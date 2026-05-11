@@ -100,11 +100,15 @@ test-hooks: ## Unit-test security hooks against synthetic inputs (must pass befo
 	@bash tests/hooks/run-all.sh
 
 .PHONY: test-orchestrator
-test-orchestrator: ## Run orchestrator Python self-tests (config + state + manifest)
+test-orchestrator: ## Run orchestrator Python self-tests (config + state + manifest + anomaly + notify)
 	@echo "== orchestrator/config self-test =="
 	@python3 -m orchestrator.config
 	@echo "== orchestrator/state_schema self-test =="
 	@python3 -m orchestrator.state_schema
+	@echo "== orchestrator/anomaly self-test =="
+	@python3 -m orchestrator.anomaly
+	@echo "== orchestrator/notify self-test =="
+	@python3 -m orchestrator.notify
 	@echo "== orchestrator/manifest_parse smoke (requires real spec) =="
 	@spec=$$(find $$HOME/github/ansible -name 'ansible-linux-system-roles.spec' 2>/dev/null | head -1); \
 	if [ -n "$$spec" ]; then \
