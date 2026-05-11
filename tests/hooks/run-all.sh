@@ -352,6 +352,55 @@ else
   check "scrub-env emits updateEnv for GITHUB_TOKEN" "0" "1" "output=$output"
 fi
 
+# ---- R5: gh api write-method detection (must DENY -X POST/PUT/PATCH/DELETE) ----
+echo "== R5: gh api write-method detection =="
+GHAPI_WRITE_DENY=(
+  '{"tool_name":"Bash","tool_input":{"command":"gh api repos/foo/bar/issues -X POST -f title=hi"}}|R5 gh api -X POST'
+  '{"tool_name":"Bash","tool_input":{"command":"gh api repos/foo/bar -X PATCH"}}|R5 gh api -X PATCH'
+  '{"tool_name":"Bash","tool_input":{"command":"gh api repos/foo/bar -X DELETE"}}|R5 gh api -X DELETE'
+  '{"tool_name":"Bash","tool_input":{"command":"gh api --method PUT repos/foo/bar"}}|R5 gh api --method PUT'
+  '{"tool_name":"Bash","tool_input":{"command":"gh api --repo linux-system-roles/sudo repos/{owner}/{repo}/issues -X POST"}}|R5 gh api -X POST upstream --repo'
+)
+for entry in "${GHAPI_WRITE_DENY[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "DENY  $desc" "2" "$code"
+done
+
+GHAPI_READ_OK=(
+  '{"tool_name":"Bash","tool_input":{"command":"gh api user"}}|R5 gh api user (default GET)'
+  '{"tool_name":"Bash","tool_input":{"command":"gh api repos/foo/bar"}}|R5 gh api repo (default GET)'
+  '{"tool_name":"Bash","tool_input":{"command":"gh api -X GET repos/foo/bar"}}|R5 gh api explicit -X GET'
+  '{"tool_name":"Bash","tool_input":{"command":"gh api --method GET repos/foo/bar"}}|R5 gh api --method GET'
+)
+for entry in "${GHAPI_READ_OK[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "ALLOW $desc" "0" "$code"
+done
+
+# ---- R5: git push to unknown remote without resolvable URL ----
+echo "== R5: git push unknown-remote without URL =="
+GIT_PUSH_UNKNOWN_DENY=(
+  '{"tool_name":"Bash","tool_input":{"command":"git push some-random-remote main"}}|R5 git push unknown remote'
+  '{"tool_name":"Bash","tool_input":{"command":"git push attacker-remote HEAD"}}|R5 git push attacker remote'
+)
+for entry in "${GIT_PUSH_UNKNOWN_DENY[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "DENY  $desc" "2" "$code"
+done
+
+GIT_PUSH_PLAUSIBLE_OK=(
+  '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}|R5 git push origin OK'
+  '{"tool_name":"Bash","tool_input":{"command":"git push fork main"}}|R5 git push fork OK'
+)
+for entry in "${GIT_PUSH_PLAUSIBLE_OK[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(run_hook "$UPSTREAM" "$json")
+  check "ALLOW $desc" "0" "$code"
+done
+
 # ---- Pre-init safety: with empty config, ALL writes must be blocked ----
 echo "== pre-init safety (empty config blocks everything) =="
 EMPTY_CONFIG="$(mktemp -t lsr-test-empty.XXXXXX.json)"
@@ -359,8 +408,10 @@ echo '{"version":1,"github":{"user":""},"obs":{"user":"","personal_project_root"
 
 PREINIT_DENY=(
   '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}|pre-init: any push blocked'
+  '{"tool_name":"Bash","tool_input":{"command":"git push fork main"}}|pre-init: git push fork blocked'
   '{"tool_name":"Bash","tool_input":{"command":"gh repo create AnyUser/foo"}}|pre-init: repo create blocked'
   '{"tool_name":"Bash","tool_input":{"command":"osc ci -p home:anyuser:branches:x foo"}}|pre-init: osc ci blocked'
+  '{"tool_name":"Bash","tool_input":{"command":"gh api repos/foo/bar -X POST"}}|pre-init: gh api -X POST blocked'
 )
 for entry in "${PREINIT_DENY[@]}"; do
   desc="${entry##*|}"; json="${entry%|*}"
@@ -368,6 +419,36 @@ for entry in "${PREINIT_DENY[@]}"; do
   check "DENY  $desc" "2" "$code"
 done
 rm -f "$EMPTY_CONFIG"
+
+# ---- R5: dynamic-identity — same hook works with a DIFFERENT user ----
+echo "== R5: alt-identity (alice/alice123) — dynamic resolution =="
+ALT_CONFIG="$(mktemp -t lsr-test-alt.XXXXXX.json)"
+cat > "$ALT_CONFIG" <<'EOF'
+{"version":1,"github":{"user":"alice","fork_pattern":"{user}/{role}"},"obs":{"user":"alice123","personal_project_root":"home:alice"}}
+EOF
+
+ALT_ALLOW=(
+  '{"tool_name":"Bash","tool_input":{"command":"gh pr view 12 --repo linux-system-roles/sudo"}}|alt: read-only gh pr view'
+  '{"tool_name":"Bash","tool_input":{"command":"osc co home:alice:branches:devel:sap:ansible"}}|alt: osc co into home:alice'
+  '{"tool_name":"Bash","tool_input":{"command":"osc ci -m hi -p home:alice:branches:devel:sap:ansible"}}|alt: osc ci in home:alice'
+)
+for entry in "${ALT_ALLOW[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(LSR_CONFIG_OVERRIDE="$ALT_CONFIG" bash "$UPSTREAM" <<<"$json" >/dev/null 2>&1; echo $?)
+  check "ALLOW $desc" "0" "$code"
+done
+
+ALT_DENY=(
+  '{"tool_name":"Bash","tool_input":{"command":"gh pr create --repo linux-system-roles/sudo"}}|alt: gh pr create still blocked'
+  '{"tool_name":"Bash","tool_input":{"command":"gh repo create Spectro34/foo"}}|alt: Spectro34 is NOT the configured owner'
+  '{"tool_name":"Bash","tool_input":{"command":"osc ci -m hi -p home:Spectro34:branches:foo"}}|alt: osc ci into wrong home: blocked'
+)
+for entry in "${ALT_DENY[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(LSR_CONFIG_OVERRIDE="$ALT_CONFIG" bash "$UPSTREAM" <<<"$json" >/dev/null 2>&1; echo $?)
+  check "DENY  $desc" "2" "$code"
+done
+rm -f "$ALT_CONFIG"
 
 # ---------------------------------------------------------------- summary
 echo ""

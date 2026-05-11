@@ -38,14 +38,16 @@ ok "All required commands present."
 # ---------------------------------------------------------------- gh
 bold "[2/5] GitHub auth"
 if gh auth status >/dev/null 2>&1; then
-  GH_USER="$(gh api user --jq .login 2>/dev/null || echo unknown)"
+  GH_USER="$(gh api user --jq .login 2>/dev/null)"
+if [[ -z "$GH_USER" ]]; then err "gh api user returned empty — auth not working"; exit 1; fi
   ok "gh already authenticated as $GH_USER"
 else
   echo "Not authenticated. Running 'gh auth login' — follow the prompts."
   echo "(Use SSH protocol when asked.)"
   read -rp "Press Enter to continue..."
   gh auth login --git-protocol ssh --hostname github.com || { err "gh auth failed"; exit 1; }
-  GH_USER="$(gh api user --jq .login 2>/dev/null || echo unknown)"
+  GH_USER="$(gh api user --jq .login 2>/dev/null)"
+if [[ -z "$GH_USER" ]]; then err "gh api user returned empty — auth not working"; exit 1; fi
   ok "gh authenticated as $GH_USER"
 fi
 
@@ -167,39 +169,50 @@ GIT_EMAIL="$(git config --global user.email 2>/dev/null || echo '')"
 GIT_NAME="$(git config --global user.name 2>/dev/null || echo '')"
 
 cd "$WORKSPACE"
-python3 - <<PY
-import json, os, sys
-sys.path.insert(0, "$WORKSPACE")
-from orchestrator.config import default_config, load_config, init_from_identity, save_config
+# Heredoc QUOTED ('PY') — no shell interpolation. Values passed via env vars
+# so usernames with any character (dot, dash, all-numeric) are safe.
+export LSR_GH_USER="$GH_USER_JSON"
+export LSR_OBS_USER="$OBS_USER_JSON"
+export LSR_GIT_EMAIL="$GIT_EMAIL"
+export LSR_GIT_NAME="$GIT_NAME"
+export LSR_WORKSPACE="$WORKSPACE"
+export LSR_MISSING_IMG_COUNT="${#MISSING_IMG[@]}"
 
-# Preserve any existing user overrides (e.g. source_project changed manually).
-existing = load_config("$WORKSPACE/state/config.json")
+python3 - <<'PY'
+import json, os, sys
+ws = os.environ["LSR_WORKSPACE"]
+sys.path.insert(0, ws)
+from orchestrator.config import load_config, init_from_identity, save_config
+
+# init_from_identity preserves existing user overrides (e.g. a manually-set
+# source_project). See orchestrator/config.py for the merge policy.
+existing = load_config(os.path.join(ws, "state/config.json"))
 detected = {
-    "github_user": "$GH_USER_JSON",
-    "obs_user":    "$OBS_USER_JSON",
-    "git_email":   "$GIT_EMAIL",
-    "git_name":    "$GIT_NAME",
+    "github_user": os.environ.get("LSR_GH_USER", ""),
+    "obs_user":    os.environ.get("LSR_OBS_USER", ""),
+    "git_email":   os.environ.get("LSR_GIT_EMAIL", ""),
+    "git_name":    os.environ.get("LSR_GIT_NAME", ""),
 }
 cfg = init_from_identity(detected, existing)
-save_config("$WORKSPACE/state/config.json", cfg)
+save_config(os.path.join(ws, "state/config.json"), cfg)
 print(f"github.user = {cfg['github']['user']}")
 print(f"obs.user = {cfg['obs']['user']}")
 print(f"obs.personal_project_root = {cfg['obs']['personal_project_root']}")
 PY
 
-# Legacy setup-complete marker — kept for backwards compat with anything
-# that reads it.
-python3 - <<PY
+# Legacy setup-complete marker — kept for back-compat.
+python3 - <<'PY'
 import json, os, datetime
+ws = os.environ["LSR_WORKSPACE"]
 state = {
     "version": 1,
     "completed_at": datetime.datetime.now(datetime.UTC).isoformat(),
-    "github_user": "$GH_USER_JSON",
-    "obs_user": "$OBS_USER_JSON",
-    "missing_qemu_images": ${#MISSING_IMG[@]},
+    "github_user": os.environ.get("LSR_GH_USER", ""),
+    "obs_user":    os.environ.get("LSR_OBS_USER", ""),
+    "missing_qemu_images": int(os.environ.get("LSR_MISSING_IMG_COUNT", "0")),
     "host": os.uname().nodename,
 }
-with open("$WORKSPACE/state/.setup-complete.json", "w") as f:
+with open(os.path.join(ws, "state/.setup-complete.json"), "w") as f:
     json.dump(state, f, indent=2)
 PY
 ok "Wrote state/config.json and state/.setup-complete.json"

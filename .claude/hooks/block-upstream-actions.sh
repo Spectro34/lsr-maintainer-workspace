@@ -287,7 +287,17 @@ while IFS= read -r sub; do
             *" release view"*|*" release list"*) : ;;
             *" workflow view"*|*" workflow list"*) : ;;
             *" run view"*|*" run list"*|*" run watch"*) : ;;
-            *" api "*) : ;;  # gh api is read-mostly; calling user must reason about it
+            *" api "*)
+              # gh api is read-mostly, but -X POST/PUT/PATCH/DELETE / --method <write>
+              # is a write op. Only allow read methods (GET, HEAD, default).
+              if [[ "$args" =~ (-X|--method)[[:space:]]+([A-Z]+) ]]; then
+                method="${BASH_REMATCH[2]}"
+                case "$method" in
+                  GET|HEAD) : ;;
+                  *) emit_block "gh api --method/-X $method against $target is a write op; blocked." "$sub" ;;
+                esac
+              fi
+              ;;
             *" auth status"*) : ;;
             *)
               # Any write-style gh subcommand against non-configured-owner → block.
@@ -312,6 +322,14 @@ while IFS= read -r sub; do
           *" gist create"*|*" gist delete"*|*" gist edit"*)
             emit_block "gh gist write op forbidden (gists are public unless --secret; agent should not post)." "$sub" ;;
         esac
+        # gh api -X POST/PUT/PATCH/DELETE against ANY endpoint (no --repo flag).
+        if [[ "$args" =~ " api " ]] && [[ "$args" =~ (-X|--method)[[:space:]]+([A-Z]+) ]]; then
+          method="${BASH_REMATCH[2]}"
+          case "$method" in
+            GET|HEAD) : ;;
+            *) emit_block "gh api --method/-X $method is a write op (any endpoint); blocked. Surface via PENDING instead." "$sub" ;;
+          esac
+        fi
       fi
       ;;
 
@@ -408,13 +426,26 @@ while IFS= read -r sub; do
               # Resolve remote name → URL.
               url="$(remote_url "$remote")"
               if [[ -n "$url" ]] && gh_url_is_upstream "$url"; then
-                emit_block "git push to remote '$remote' ($url) is upstream; only ${ALLOW_GH_OWNER}/* allowed." "$sub"
+                emit_block "git push to remote '$remote' ($url) is upstream; only ${ALLOW_GH_OWNER:-<unconfigured>}/* allowed." "$sub"
               fi
-              # If we can't resolve (no cwd context), refuse pushes whose
-              # remote name suggests upstream.
-              case "$remote" in
-                upstream|UPSTREAM|original) emit_block "git push to remote named '$remote' is forbidden by policy." "$sub" ;;
-              esac
+              # If we can't resolve to a URL (no cwd context, or remote not
+              # configured in the cwd's repo), apply policy:
+              # 1. Pre-init (ALLOW_GH_OWNER empty) → DENY everything.
+              # 2. Block by known-bad remote names (upstream/UPSTREAM/original).
+              # 3. Only `origin`, `fork`, and `${ALLOW_GH_OWNER}` are accepted
+              #    as plausibly-personal remote names.
+              if [[ -z "$url" ]]; then
+                if [[ -z "$ALLOW_GH_OWNER" ]]; then
+                  emit_block "git push pre-init (no config) to remote '$remote': cannot verify target." "$sub"
+                fi
+                case "$remote" in
+                  upstream|UPSTREAM|original)
+                    emit_block "git push to remote named '$remote' is forbidden by policy." "$sub" ;;
+                  origin|fork|"$ALLOW_GH_OWNER") : ;;  # plausible personal remote name
+                  *)
+                    emit_block "git push to unknown remote '$remote' (cannot resolve URL): refuse to push without verifying target." "$sub" ;;
+                esac
+              fi
             fi
           fi
           ;;

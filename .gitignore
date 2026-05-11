@@ -1,7 +1,12 @@
-# Runtime state
+# Runtime state — identity, posture, queue, worktrees.
+# NEVER commit these: state/config.json contains the user's GH/OBS login,
+# state/.lsr-maintainer-state.json contains their PR cursors + role tracking,
+# state/.bootstrap-state.json contains a host fingerprint.
+state/config.json
 state/.lsr-maintainer-state.json
 state/.bootstrap-state.json
 state/.setup-complete.json
+state/.run.pid
 state/PENDING_REVIEW.md
 state/cache/
 state/worktrees/

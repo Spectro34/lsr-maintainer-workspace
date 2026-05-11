@@ -187,13 +187,36 @@ def detect_identity() -> dict[str, str]:
 
 def init_from_identity(detected: dict[str, str], existing: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build a fresh config from detected identity, preserving any overrides
-    in `existing` (e.g. user prefers a non-default source_project)."""
+    in `existing`.
+
+    Merge policy:
+    - github.user / obs.user are filled ONLY if empty in existing. Detected
+      values are used as the initial seed; re-running setup against a
+      DIFFERENT account will NOT overwrite. (Sanity guard against accidentally
+      cross-wiring an account; the user must manually clear the field to
+      re-detect.)
+    - obs.personal_project_root is recomputed only if obs.user was just filled
+      AND personal_project_root is still empty.
+    - All other fields (source_project, paths, schedule, test_targets) are
+      never touched by init — user customizations always preserved.
+
+    The result is that `./bin/setup.sh` is safe to re-run idempotently.
+    """
     cfg = existing or default_config()
-    if detected.get("github_user"):
+
+    # GitHub user
+    if detected.get("github_user") and not cfg["github"].get("user"):
         cfg["github"]["user"] = detected["github_user"]
-    if detected.get("obs_user"):
+
+    # OBS user — only fill if empty (preserve overrides on re-run).
+    if detected.get("obs_user") and not cfg["obs"].get("user"):
         cfg["obs"]["user"] = detected["obs_user"]
-        cfg["obs"]["personal_project_root"] = f"home:{detected['obs_user']}"
+
+    # personal_project_root — only auto-compute if user is set AND root is empty.
+    # This lets a user manually set a non-default root (rare) and keep it.
+    if cfg["obs"].get("user") and not cfg["obs"].get("personal_project_root"):
+        cfg["obs"]["personal_project_root"] = f"home:{cfg['obs']['user']}"
+
     return cfg
 
 
@@ -231,6 +254,8 @@ if __name__ == "__main__":
     c = load_config(p)
     assert c["version"] == CONFIG_VERSION
     assert c["github"]["user"] == ""  # pre-init = empty = hooks block all writes
+
+    # First init populates from detection.
     detected = {"github_user": "alice", "obs_user": "alice123", "git_email": "a@b", "git_name": "A"}
     c = init_from_identity(detected, c)
     save_config(p, c)
@@ -239,7 +264,27 @@ if __name__ == "__main__":
     assert c2["obs"]["personal_project_root"] == "home:alice123"
     assert fork_repo(c2, "sudo") == "alice/sudo"
     assert obs_branch_project(c2) == "home:alice123:branches:devel:sap:ansible"
+
     # Empty config → empty fork/project (so hooks know to block).
     assert fork_repo(default_config(), "sudo") == ""
     assert obs_branch_project(default_config()) == ""
+
+    # Re-init must PRESERVE existing identity, NOT overwrite with a different
+    # detected user. Sanity guard against accidental cross-wiring.
+    different = {"github_user": "bob", "obs_user": "bob42", "git_email": "b@b", "git_name": "B"}
+    c3 = init_from_identity(different, c2)
+    assert c3["github"]["user"] == "alice", "re-init must not overwrite github.user"
+    assert c3["obs"]["user"] == "alice123", "re-init must not overwrite obs.user"
+    assert c3["obs"]["personal_project_root"] == "home:alice123"
+
+    # User customizes source_project; re-init preserves it.
+    c3["obs"]["source_project"] = "devel:packman"
+    c4 = init_from_identity(detected, c3)
+    assert c4["obs"]["source_project"] == "devel:packman", "re-init must preserve user-customized source_project"
+
+    # User clears github.user manually; re-init refills from detection.
+    c3["github"]["user"] = ""
+    c5 = init_from_identity(different, c3)
+    assert c5["github"]["user"] == "bob", "init must fill empty github.user from new detection"
+
     print("OK", p)

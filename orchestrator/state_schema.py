@@ -84,9 +84,17 @@ def seed_roles_from_manifest(
             # Keep version + sle16_only in sync with manifest.
             state["roles"][name]["version"] = r.get("version")
             state["roles"][name]["sle16_only"] = r.get("sle16_only", False)
-            # If github_user changed (account migration), update fork_repo too.
-            if github_user and not state["roles"][name].get("fork_repo"):
-                state["roles"][name]["fork_repo"] = f"{github_user}/{name}"
+            # Reconcile fork_repo on identity change. If config says
+            # github_user=alice but state has fork_repo=bob/sudo, the agent
+            # would push to the wrong account. Rewrite to alice/sudo.
+            if github_user:
+                current_fork = state["roles"][name].get("fork_repo", "")
+                current_owner = current_fork.split("/", 1)[0] if "/" in current_fork else ""
+                if current_owner != github_user:
+                    state["roles"][name]["fork_repo"] = f"{github_user}/{name}"
+                    # Identity changed — clear PR cursors. The old user's
+                    # cursors don't apply to the new user's forks.
+                    state["roles"][name]["pr_cursors"] = {}
     return created
 
 
@@ -230,5 +238,13 @@ if __name__ == "__main__":
     s3["roles"]["sudo"]["patched_files"] = ["library/scan_sudoers.py"]
     seed_roles_from_manifest(s3, manifest, github_user="alice")
     assert s3["roles"]["sudo"]["patched_files"] == ["library/scan_sudoers.py"]
+
+    # Identity migration: github_user changes from alice → bob. fork_repo and
+    # pr_cursors must reset; patched_files preserved (role-level state).
+    s3["roles"]["sudo"]["pr_cursors"] = {"12": {"last_seen_comment_id": 999}}
+    seed_roles_from_manifest(s3, manifest, github_user="bob")
+    assert s3["roles"]["sudo"]["fork_repo"] == "bob/sudo", "fork_repo must follow identity change"
+    assert s3["roles"]["sudo"]["pr_cursors"] == {}, "PR cursors must reset on identity change"
+    assert s3["roles"]["sudo"]["patched_files"] == ["library/scan_sudoers.py"], "patched_files preserved"
 
     print("OK", p)
