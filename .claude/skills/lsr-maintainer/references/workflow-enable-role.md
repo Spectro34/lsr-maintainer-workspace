@@ -13,7 +13,7 @@ Search in this order; first match wins:
 
 ```bash
 gh repo view linux-system-roles/<role> --json url 2>/dev/null
-gh repo view Spectro34/<role>           --json url 2>/dev/null   # existing fork?
+gh repo view {github_user}/<role>           --json url 2>/dev/null   # existing fork?
 gh repo view geerlingguy/ansible-role-<role>     --json url 2>/dev/null
 gh repo view robertdebock/ansible-role-<role>    --json url 2>/dev/null
 gh repo view bertvv/ansible-role-<role>          --json url 2>/dev/null
@@ -24,7 +24,7 @@ If none → return `{verdict: "not_found"}`.
 
 ## Step 2 — Confirm fork exists
 
-If a `Spectro34/<role>` fork doesn't exist, **DO NOT** auto-fork. Hooks block `gh repo fork` against arbitrary owners. Surface to PENDING:
+If a `{github_user}/<role>` fork doesn't exist, **DO NOT** auto-fork. Hooks block `gh repo fork` against arbitrary owners. Surface to PENDING:
 
 ```
 🆕 Enablement blocked: fork needed.
@@ -38,7 +38,7 @@ Return `{verdict: "fork_needed"}`.
 
 ```bash
 WT=state/worktrees/<role>-enable
-git clone git@github.com:Spectro34/<role>.git "$WT"
+git clone git@github.com:{github_user}/<role>.git "$WT"
 cd "$WT"
 git checkout -b fix/suse-support
 ```
@@ -149,7 +149,7 @@ Only for roles that should ship in the `ansible-linux-system-roles` OBS package 
 
 ```bash
 WT_OBS=state/worktrees/obs-spec-update
-osc co -o "$WT_OBS" home:Spectro34:branches:devel:sap:ansible/ansible-linux-system-roles
+osc co -o "$WT_OBS" {obs_branch_project}/ansible-linux-system-roles
 # Edit spec: add %global <role>_version <ver>, add Source line, add to %files
 osc build openSUSE_Tumbleweed x86_64    # local-only build to confirm spec parses
 ```
@@ -170,7 +170,7 @@ LSR roles shipped via OBS expect a `SUSE/ansible-<role>` fork with a `<version>-
 cd "$WT"
 git tag <version>-suse
 # DO NOT push — hooks block pushing to SUSE/* and the SUSE org is not
-# owned by Spectro34 anyway.
+# owned by you anyway.
 ```
 
 Surface as PENDING:
@@ -191,7 +191,7 @@ Update state's queue to add a `new_role_ready` item with the summary. Rendered i
 {
   "role": "squid",
   "verdict": "enabled|not_viable|fork_needed|review_rejected|regression",
-  "fork_branch": "Spectro34/squid@fix/suse-support",
+  "fork_branch": "{github_user}/squid@fix/suse-support",
   "commit_sha": "abc...",
   "regression_results": {"sle-16": "PASS (via fallback to Leap 16)"},
   "pending_actions": [

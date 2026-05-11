@@ -154,22 +154,63 @@ if (( ${#MISSING_IMG[@]} > 0 )); then
 fi
 
 # ---------------------------------------------------------------- record state
-bold "[5/5] Recording setup state (public info only — no secrets)"
+bold "[5/5] Writing workspace config from detected identity"
 mkdir -p "$WORKSPACE/state"
+
+# Generate state/config.json — the single source of truth the hooks and
+# sub-agents read. This makes the workspace reusable across GH/OBS accounts:
+# every host that runs ./bin/setup.sh gets its own config and operates under
+# its own identity.
+GH_USER_JSON="$GH_USER"
+OBS_USER_JSON="$OBS_USER"
+GIT_EMAIL="$(git config --global user.email 2>/dev/null || echo '')"
+GIT_NAME="$(git config --global user.name 2>/dev/null || echo '')"
+
+cd "$WORKSPACE"
+python3 - <<PY
+import json, os, sys
+sys.path.insert(0, "$WORKSPACE")
+from orchestrator.config import default_config, load_config, init_from_identity, save_config
+
+# Preserve any existing user overrides (e.g. source_project changed manually).
+existing = load_config("$WORKSPACE/state/config.json")
+detected = {
+    "github_user": "$GH_USER_JSON",
+    "obs_user":    "$OBS_USER_JSON",
+    "git_email":   "$GIT_EMAIL",
+    "git_name":    "$GIT_NAME",
+}
+cfg = init_from_identity(detected, existing)
+save_config("$WORKSPACE/state/config.json", cfg)
+print(f"github.user = {cfg['github']['user']}")
+print(f"obs.user = {cfg['obs']['user']}")
+print(f"obs.personal_project_root = {cfg['obs']['personal_project_root']}")
+PY
+
+# Legacy setup-complete marker — kept for backwards compat with anything
+# that reads it.
 python3 - <<PY
 import json, os, datetime
 state = {
     "version": 1,
     "completed_at": datetime.datetime.now(datetime.UTC).isoformat(),
-    "github_user": "${GH_USER}",
-    "obs_user": "${OBS_USER}",
+    "github_user": "$GH_USER_JSON",
+    "obs_user": "$OBS_USER_JSON",
     "missing_qemu_images": ${#MISSING_IMG[@]},
     "host": os.uname().nodename,
 }
 with open("$WORKSPACE/state/.setup-complete.json", "w") as f:
     json.dump(state, f, indent=2)
 PY
-ok "Wrote state/.setup-complete.json"
+ok "Wrote state/config.json and state/.setup-complete.json"
+
+# Verify git author is set; bug-fix-implementer needs it.
+if [[ -z "$GIT_EMAIL" ]] || [[ -z "$GIT_NAME" ]]; then
+  warn "git user.email / user.name not set globally."
+  warn "Run: git config --global user.email 'you@example.com'"
+  warn "     git config --global user.name 'Your Name'"
+  warn "Without these, bug-fix-implementer commits will be rejected by GitHub."
+fi
 
 echo ""
 bold "Setup complete. Next steps:"

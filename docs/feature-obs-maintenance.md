@@ -1,6 +1,6 @@
 # Feature: OBS package maintenance
 
-The agent maintains `ansible-linux-system-roles` in `home:Spectro34:branches:devel:sap:ansible` (your personal OBS branch). When a build fails or a managed role's upstream releases a new version, the agent drafts the fix, runs a local build to verify, and commits. It never submits an upstream request.
+The agent maintains `ansible-linux-system-roles` in `${obs_branch_project}` (your personal OBS branch). When a build fails or a managed role's upstream releases a new version, the agent drafts the fix, runs a local build to verify, and commits. It never submits an upstream request.
 
 ## Flow
 
@@ -13,7 +13,7 @@ manifest-syncer  ─(parses ansible-linux-system-roles.spec)─> managed_roles[]
    ▼
 event-driven items added to queue:
    - obs_role_bumped: upstream tagged a new version
-   - obs_build_failure: latest build on home:Spectro34:branches:... failed
+   - obs_build_failure: latest build on ${obs_user_root}:branches:... failed
    │
    ▼
 orchestrator picks up P2 OBS item
@@ -23,7 +23,7 @@ obs-package-maintainer wraps obs-package-skill
    │
    ▼
 Skill(skill="obs-package-skill", args="work on ansible-linux-system-roles
-                                       in home:Spectro34:branches:devel:sap:ansible")
+                                       in ${obs_branch_project}")
    │
    ▼
 obs-package-skill phase 0–4 loop:
@@ -54,21 +54,21 @@ We don't duplicate any of that — we delegate.
 
 ## Boundaries
 
-- All commits to `home:Spectro34:branches:devel:sap:ansible` only (never to `devel:sap:ansible`).
+- All commits to `${obs_branch_project}` only (never to `devel:sap:ansible`).
 - `osc sr`, `osc submitrequest`, `osc createrequest`, `osc copypac` are blocked at two layers (permission deny + hook).
-- `osc delete`/`rdelete` restricted to `home:Spectro34:*` paths.
+- `osc delete`/`rdelete` restricted to `${obs_user_root}:*` paths.
 - Changelog entries written via `osc vc` (allowed) — never edited directly.
 
 ## Outputs
 
-- New commit (`osc ci`) on `home:Spectro34:branches:devel:sap:ansible/ansible-linux-system-roles`
+- New commit (`osc ci`) on `${obs_branch_project}/ansible-linux-system-roles`
 - `state.obs.ansible-linux-system-roles.last_build_state` updated
 - `state/PENDING_REVIEW.md` "🏗 OBS package status" section showing per-target build state
 
 ## When to look in
 
 ```bash
-osc results home:Spectro34:branches:devel:sap:ansible ansible-linux-system-roles
+osc results ${obs_branch_project} ansible-linux-system-roles
 # or
 make pending  # the agent's summary
 ```

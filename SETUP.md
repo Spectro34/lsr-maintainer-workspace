@@ -35,7 +35,7 @@ sudo usermod -aG libvirt $USER
 
 Required:
 
-- A GitHub account (`Spectro34` for the canonical setup).
+- A GitHub account (`${github_user}` (from setup.sh detection)).
 - An SSH key registered with GitHub. Test: `ssh -T git@github.com`.
 - A fork on **each role you want the agent to maintain**. The agent's first run will list any missing forks in `state/PENDING_REVIEW.md` so you can create them on demand.
 
@@ -60,9 +60,9 @@ Token scopes needed: `repo`, `read:org`. The agent will warn if `delete_repo` is
 
 Required:
 
-- An account on https://build.opensuse.org (`spectro34` for the canonical setup).
-- Membership in `home:Spectro34` (you have this automatically).
-- Read access to `devel:sap:ansible` (request membership if you want to maintain that project's packages directly; the agent works from `home:Spectro34:branches:devel:sap:ansible` either way).
+- An account on https://build.opensuse.org (`${obs_user}` (from setup.sh detection)).
+- Membership in `${obs_user_root}` (you have this automatically).
+- Read access to `devel:sap:ansible` (request membership if you want to maintain that project's packages directly; the agent works from `${obs_branch_project}` either way).
 
 Authenticate `osc`:
 

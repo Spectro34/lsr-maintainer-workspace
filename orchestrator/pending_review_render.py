@@ -58,9 +58,13 @@ def render(state: dict[str, Any]) -> str:
 
     lines.append("## 🏗 OBS package status")
     obs = state.get("obs", {})
-    pkg = obs.get("ansible-linux-system-roles", {})
+    # The OBS project label is derived from config (see orchestrator.config.obs_branch_project).
+    # The caller can pass it in via state["obs"]["_branch_project_label"]; if absent, render a generic note.
+    branch_proj = obs.get("_branch_project_label") or "(home:<user>:branches:<source>)"
+    pkg_name = obs.get("_package_name") or "ansible-linux-system-roles"
+    pkg = obs.get(pkg_name, {})
     last = pkg.get("last_build_state", "(never checked)")
-    lines.append(f"- ansible-linux-system-roles in `home:Spectro34:branches:devel:sap:ansible` — last build state: {last}")
+    lines.append(f"- {pkg_name} in `{branch_proj}` — last build state: {last}")
     lines.append("")
 
     lines.append("## 🆕 New role ready to ship")

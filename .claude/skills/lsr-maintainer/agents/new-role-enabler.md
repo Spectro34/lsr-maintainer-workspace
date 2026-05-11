@@ -11,11 +11,11 @@ Full port playbook to add SUSE/SLE 16 support to a previously-unported role.
 
 1. **Locate upstream** — search in this order:
    - `linux-system-roles/<role>`
-   - `Spectro34/<role>` (existing fork)
+   - `{github_user}/<role>` (existing fork)
    - `geerlingguy/ansible-role-<role>`, `robertdebock/ansible-role-<role>`, `bertvv/ansible-role-<role>`, `mrlesmithjr/ansible-<role>` (community patterns)
    - If none found, return `{verdict: "not_found"}`.
 
-2. **Fork** — if no `Spectro34/<role>` fork exists, **do NOT create it autonomously**. Hooks would block `gh repo fork` against arbitrary owners anyway. Surface to PENDING_REVIEW.md: "Fork needed at Spectro34/<role>; run `gh repo fork <upstream>` yourself, then re-run." Return `{verdict: "fork_needed"}`.
+2. **Fork** — if no `{github_user}/<role>` fork exists, **do NOT create it autonomously**. Hooks would block `gh repo fork` against arbitrary owners anyway. Surface to PENDING_REVIEW.md: "Fork needed at {github_user}/<role>; run `gh repo fork <upstream>` yourself, then re-run." Return `{verdict: "fork_needed"}`.
 
 3. **Clone the fork** into a worktree at `state/worktrees/<role>-enable/`.
 
@@ -55,7 +55,7 @@ Full port playbook to add SUSE/SLE 16 support to a previously-unported role.
    - **Do NOT `osc ci`** automatically — surface as a PENDING entry "OBS spec update ready, review the diff at state/worktrees/obs-spec-update/, then `osc ci` and `make sync-manifest`".
 
 10. **Stage SUSE/ansible-<role> tag** if needed:
-    - The role's SUSE-side convention is a fork at `SUSE/ansible-<role>` with `suse-<version>` tags. Hooks block `gh repo create SUSE/*` and pushes to non-Spectro34 remotes.
+    - The role's SUSE-side convention is a fork at `SUSE/ansible-<role>` with `suse-<version>` tags. Hooks block `gh repo create SUSE/*` and pushes to non-configured-owner remotes.
     - Generate the tag locally in the worktree (`git tag <version>-suse`); surface as PENDING: "Tag ready, push to SUSE/ansible-<role> yourself if you have permission, or coordinate with the SUSE org owner."
 
 ## Output
@@ -64,11 +64,11 @@ Full port playbook to add SUSE/SLE 16 support to a previously-unported role.
 {
   "role": "squid",
   "verdict": "enabled|not_viable|fork_needed|review_rejected|regression",
-  "fork_branch": "Spectro34/squid@fix/suse-support",
+  "fork_branch": "{github_user}/squid@fix/suse-support",
   "commit_sha": "abc...",
   "regression_results": {"sle-16": "PASS"},
   "pending_actions": [
-    "Open PR: gh pr create --repo geerlingguy/ansible-role-squid --head Spectro34:fix/suse-support",
+    "Open PR: gh pr create --repo geerlingguy/ansible-role-squid --head {github_user}:fix/suse-support",
     "OBS spec staged at state/worktrees/obs-spec-update/ — review and osc ci",
     "Tag staged: <version>-suse — push to SUSE/ansible-squid if you have permission"
   ]
@@ -77,6 +77,6 @@ Full port playbook to add SUSE/SLE 16 support to a previously-unported role.
 
 ## Constraints
 
-- Never auto-create repos or auto-push tags outside `Spectro34/*`.
+- Never auto-create repos or auto-push tags outside `{github_user}/*`.
 - Never auto-`osc ci` the spec update — that's a release decision.
 - Time budget: 60 minutes (matches the orchestrator's per-item cap for enablement).

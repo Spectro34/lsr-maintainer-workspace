@@ -11,7 +11,7 @@ Idempotent host preparation. Safe to run repeatedly. Designed for `/lsr-maintain
 1. **Detect host** — read `/etc/os-release` for `ID` and `VERSION_ID`. Compute `host_fingerprint` = sha256 of `(hostname, primary-mac, ID, VERSION_ID)`.
 2. **System packages** — check for presence of `git`, `python3`, `gh`, `osc`, `make`, `jq`, `qemu-system-x86`. If any missing, emit a PENDING entry with the exact install command for the detected OS. Do NOT run sudo/zypper/apt/dnf — those are blocked.
 3. **Directories** — `bin/install-deps.sh` already handles this on first install; replay the logic here for idempotency (mkdir -p ...).
-4. **Symlink target check** — `projects/lsr-agent` should resolve. If broken (running on a host without `~/github/rnd/lsr-agent/`), emit PENDING "Clone Spectro34/skill-lifecycle-framework to ~/github/rnd/ for the lsr-agent symlink to resolve."
+4. **Symlink target check** — `projects/lsr-agent` should resolve. If broken (running on a host without `~/github/rnd/lsr-agent/`), emit PENDING "Clone the upstream skill-lifecycle-framework repo (whichever fork you use) to ~/github/rnd/ for the lsr-agent symlink to resolve."
 5. **tox-lsr venv** — check `~/github/ansible/testing/tox-lsr-venv/bin/activate` exists. If not:
    - Create venv: `python3 -m venv ~/github/ansible/testing/tox-lsr-venv`
    - Install: `~/github/ansible/testing/tox-lsr-venv/bin/pip install tox-lsr` (pin to the version in `references/tox-lsr-pin.txt` if present).

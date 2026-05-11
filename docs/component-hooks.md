@@ -10,14 +10,14 @@ Blocks:
 |---|---|
 | `gh pr create` (any) | Pattern + chained-command detection |
 | `gh pr merge` | Pattern |
-| `gh repo create OWNER/...` where OWNER ≠ Spectro34 | Owner extraction from `--repo` flag |
+| `gh repo create OWNER/...` where OWNER ≠ configured user | Owner extraction from `--repo` flag |
 | `gh repo delete` | Pattern |
 | `osc sr`, `submitrequest`, `submitreq`, `createrequest` | Pattern |
 | `osc copypac` | Pattern |
-| `osc delete`/`rdelete` outside `home:Spectro34:*` | Project-name regex |
+| `osc delete`/`rdelete` outside `${obs_user_root}:*` | Project-name regex |
 | `osc lock`/`unlock` | Pattern (shared-state change) |
 | `git push --force` / `-f` / `--force-with-lease` | Pattern |
-| `git push <remote>` where remote URL ∉ Spectro34/* | Resolves `git remote get-url <name>`, compares against allowlist |
+| `git push <remote>` where remote URL ∉ ${github_user}/* | Resolves `git remote get-url <name>`, compares against allowlist |
 | `git push <remote>` where remote name ∈ {upstream, original, UPSTREAM} | Name blacklist (defensive) |
 | `rm -rf /`, `rm -rf $HOME`, `rm -rf ~` | Literal-string match |
 | `sudo *`, `zypper`, `apt`, `dnf`, `yum` | Always blocked — agent surfaces install cmds, doesn't run them |
@@ -25,8 +25,8 @@ Blocks:
 Allows (via the explicit allow list and bypassing the deny patterns):
 
 - All read-only `gh` / `osc` / `git` commands (`view`, `list`, `diff`, `results`, `log`, `fetch`, etc.)
-- `git push origin` (resolved to a Spectro34/* URL)
-- `osc ci` inside `home:Spectro34:*` namespaces
+- `git push origin` (resolved to a ${github_user}/* URL)
+- `osc ci` inside `${obs_user_root}:*` namespaces
 
 ### Adversarial cases handled
 
@@ -34,7 +34,7 @@ Allows (via the explicit allow list and bypassing the deny patterns):
 - **Env-var prefix**: `FOO=bar gh pr create ...` — strip `[A-Z_]+=...` prefixes before parsing.
 - **`--repo` flag with arbitrary spaces or `=`**: regex matches both `--repo X` and `--repo=X`.
 - **Remote alias to upstream**: `git push origin` when `origin` URL is upstream — `git remote get-url` resolves the URL, hook compares.
-- **`gh repo create SUSE/foo`**: blocked (only Spectro34/* allowed).
+- **`gh repo create SUSE/foo`**: blocked (only ${github_user}/* allowed).
 
 ### Failure mode
 

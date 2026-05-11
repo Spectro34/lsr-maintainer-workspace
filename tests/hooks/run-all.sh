@@ -9,6 +9,20 @@ UPSTREAM="$WORKSPACE/.claude/hooks/block-upstream-actions.sh"
 CRED="$WORKSPACE/.claude/hooks/block-credential-leak.sh"
 ENV_SCRUB="$WORKSPACE/.claude/hooks/scrub-env.sh"
 
+# Synthesize a test config so the existing tests (which assume a known
+# identity) work regardless of what state/config.json says on the host.
+# Hook reads LSR_CONFIG_OVERRIDE if set.
+TEST_CONFIG="$(mktemp -t lsr-test-config.XXXXXX.json)"
+trap 'rm -f "$TEST_CONFIG"' EXIT
+cat > "$TEST_CONFIG" <<'EOF'
+{
+  "version": 1,
+  "github": {"user": "Spectro34", "fork_pattern": "{user}/{role}"},
+  "obs":    {"user": "spectro34", "personal_project_root": "home:Spectro34"}
+}
+EOF
+export LSR_CONFIG_OVERRIDE="$TEST_CONFIG"
+
 PASS=0
 FAIL=0
 FAIL_LINES=()
@@ -337,6 +351,23 @@ if echo "$output" | grep -q '"updateEnv"' && echo "$output" | grep -q 'GITHUB_TO
 else
   check "scrub-env emits updateEnv for GITHUB_TOKEN" "0" "1" "output=$output"
 fi
+
+# ---- Pre-init safety: with empty config, ALL writes must be blocked ----
+echo "== pre-init safety (empty config blocks everything) =="
+EMPTY_CONFIG="$(mktemp -t lsr-test-empty.XXXXXX.json)"
+echo '{"version":1,"github":{"user":""},"obs":{"user":"","personal_project_root":""}}' > "$EMPTY_CONFIG"
+
+PREINIT_DENY=(
+  '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}|pre-init: any push blocked'
+  '{"tool_name":"Bash","tool_input":{"command":"gh repo create AnyUser/foo"}}|pre-init: repo create blocked'
+  '{"tool_name":"Bash","tool_input":{"command":"osc ci -p home:anyuser:branches:x foo"}}|pre-init: osc ci blocked'
+)
+for entry in "${PREINIT_DENY[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(LSR_CONFIG_OVERRIDE="$EMPTY_CONFIG" bash "$UPSTREAM" <<<"$json" >/dev/null 2>&1; echo $?)
+  check "DENY  $desc" "2" "$code"
+done
+rm -f "$EMPTY_CONFIG"
 
 # ---------------------------------------------------------------- summary
 echo ""

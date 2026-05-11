@@ -102,7 +102,7 @@ if [ -L projects/lsr-agent ]; then
   if [ -d projects/lsr-agent/.claude ]; then
     components_ready.lsr_agent_symlink = true
   else
-    pending_actions.append("Clone Spectro34/skill-lifecycle-framework to ~/github/rnd/ so projects/lsr-agent symlink resolves.")
+    pending_actions.append("Clone the upstream skill-lifecycle-framework repo (whichever fork you use) to ~/github/rnd/ so projects/lsr-agent symlink resolves.")
   fi
 fi
 ```

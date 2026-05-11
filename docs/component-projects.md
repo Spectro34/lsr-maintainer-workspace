@@ -6,7 +6,7 @@ Each project in `projects/` is its own repo with its own commits, remotes, and C
 
 ### `projects/obs-package-skill/` — submodule
 
-- **Upstream**: `git@github.com:Spectro34/obs-package-skill.git`
+- **Upstream**: `git@github.com:<obs-package-skill source repo>.git`
 - **What it provides**: Autonomous OBS package maintenance skill. Phase 0–4 workflow with built-in "never osc sr" guarantee.
 - **Used by**: `obs-package-maintainer` sub-agent (delegates entirely).
 - **When to bump pin**: when obs-package-skill ships a fix or new failure-pattern detector you want.
@@ -18,34 +18,34 @@ Each project in `projects/` is its own repo with its own commits, remotes, and C
 
 ### `projects/osc-mcp/` — submodule
 
-- **Upstream**: `git@github.com:Spectro34/osc-mcp.git`
+- **Upstream**: `git@github.com:<osc-mcp fork>.git`
 - **What it provides**: The osc MCP server. Workspace's `.mcp.json` (when added) points at this checkout so the MCP server runs from a pinned commit.
 - **Used by**: `obs-package-maintainer` via Skill() → obs-package-skill → MCP tools.
 - **When to bump pin**: when osc-mcp adds new tools or fixes bugs.
 
 ### `projects/lsr-agent/` — symlink (TODO: promote to submodule)
 
-- **Current state**: symlink to `~/github/rnd/lsr-agent/` (subdir of `Spectro34/skill-lifecycle-framework`).
+- **Current state**: symlink to `~/github/rnd/lsr-agent/` (subdir of `<your fork of skill-lifecycle-framework>`).
 - **What it provides**: Deep `/lsr-agent` skill knowledge (Role Status Matrix, SUSE pkg mappings, set_vars pattern, tox infra, upstream PR status, known bugs) + 3 specialist sub-agents (check-suse-support, upstream-diff, test-role).
 - **Used by**: orchestrator (via `Skill(skill="lsr-agent", ...)`), bug-fix-implementer, new-role-enabler, all 4 reviewers.
 - **Carve-out plan**:
   ```bash
   # From ~/github/rnd:
   git subtree split --prefix=lsr-agent -b lsr-agent-extract
-  gh repo create Spectro34/lsr-agent --public --source=. --remote=lsr-agent-upstream
+  gh repo create ${github_user}/lsr-agent --public --source=. --remote=lsr-agent-upstream
   git push lsr-agent-upstream lsr-agent-extract:main
 
   # Then in workspace:
   cd ~/github/lsr-maintainer-workspace
   rm projects/lsr-agent
-  git submodule add git@github.com:Spectro34/lsr-agent.git projects/lsr-agent
+  git submodule add git@github.com:${github_user}/lsr-agent.git projects/lsr-agent
   git commit -am "Promote lsr-agent symlink to submodule"
   ```
-- **Until carved out**: anyone cloning the workspace to a new machine needs to also clone `Spectro34/skill-lifecycle-framework` at `~/github/rnd/`. `bootstrap-runner` surfaces this as a PENDING entry on hosts where the symlink target is missing.
+- **Until carved out**: anyone cloning the workspace to a new machine needs to also clone `<your fork of skill-lifecycle-framework>` at `~/github/rnd/`. `bootstrap-runner` surfaces this as a PENDING entry on hosts where the symlink target is missing.
 
 ### `projects/ansible-host-scripts/` — not yet wired
 
-- **Planned mechanism**: submodule pointing at a new `Spectro34/lsr-host-scripts` repo.
+- **Planned mechanism**: submodule pointing at a new `${github_user}/lsr-host-scripts` repo.
 - **What it would provide**: `lsr-test.sh`, `run-all-tests.sh`, `retest-failing.sh`, `patch-tox-lsr.sh`, `cleanup-suseconnect.yml` — currently living at `~/github/ansible/scripts/`.
 - **Until then**: bootstrap-runner symlinks the existing files from `~/github/ansible/scripts/` into the expected positions.
 

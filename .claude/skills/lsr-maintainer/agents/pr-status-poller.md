@@ -10,7 +10,7 @@ Read-only sub-agent. Polls open PRs on the user's forks, diffs against per-PR cu
 
 ## Workflow
 
-1. For each role in state.obs.managed_roles + hackweek roles list, fetch `gh pr list --author Spectro34 --state open --search "head:Spectro34" --json url,number,headRepository,baseRepository,headRefName`. Note this is the user's forks pushing to upstream — the PRs the user actually opens.
+1. For each role in state.obs.managed_roles + hackweek roles list, fetch `gh pr list --author "${github_user}" --state open --search "head:${github_user}" --json url,number,headRepository,baseRepository,headRefName`. Note this is the user's forks pushing to upstream — the PRs the user actually opens.
 2. Also fetch PRs they've authored: `gh pr list --author "@me" --state open --json url,number,...`. Dedup.
 3. For each open PR:
    - `gh pr view <num> --repo <base-repo> --json comments,reviews,reviewDecision,statusCheckRollup,latestReviews`
@@ -32,7 +32,7 @@ Read-only sub-agent. Polls open PRs on the user's forks, diffs against per-PR cu
 ```json
 {
   "events": [
-    {"kind": "reviewer_change_requested", "pr": {"repo": "linux-system-roles/sudo", "number": 12, "head": "Spectro34:fix/suse-support"}, "comments_text": "...", "discovered_at": "2026-05-12T03:09:00Z"},
+    {"kind": "reviewer_change_requested", "pr": {"repo": "linux-system-roles/sudo", "number": 12, "head": "{github_user}:fix/suse-support"}, "comments_text": "...", "discovered_at": "2026-05-12T03:09:00Z"},
     {"kind": "ready_to_merge", "pr": {...}}
   ],
   "cursors_to_update": {

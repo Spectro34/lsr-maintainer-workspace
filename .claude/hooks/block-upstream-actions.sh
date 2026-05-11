@@ -14,9 +14,24 @@
 
 set -u
 
-# Personal namespaces — anything else is "upstream" and blocked from writes.
-ALLOW_GH_OWNER="Spectro34"
-ALLOW_OSC_PREFIX="home:Spectro34"
+# Locate workspace root via the hook script's own path. Robust to agent cwd.
+HOOK_DIR="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+WORKSPACE_ROOT="$(dirname "$(dirname "$HOOK_DIR")")"
+# Env-var override for tests; default to the workspace's state/config.json.
+CONFIG_JSON="${LSR_CONFIG_OVERRIDE:-${WORKSPACE_ROOT}/state/config.json}"
+
+# Personal namespaces — read from config.json at runtime. If the config
+# doesn't exist yet (pre-init), both vars are empty strings which makes
+# the `gh_url_is_upstream` / `osc_proj_is_upstream` checks treat EVERYTHING
+# as upstream (safer than allowing writes against a guessed identity).
+# Run ./bin/setup.sh once to populate.
+ALLOW_GH_OWNER=""
+ALLOW_OSC_PREFIX=""
+if [ -f "$CONFIG_JSON" ] && command -v jq >/dev/null 2>&1; then
+  ALLOW_GH_OWNER="$(jq -r '.github.user // ""' "$CONFIG_JSON" 2>/dev/null)"
+  ALLOW_OSC_PREFIX="$(jq -r '.obs.personal_project_root // ""' "$CONFIG_JSON" 2>/dev/null)"
+fi
+
 SECURITY_LOG="${HOME}/.cache/lsr-maintainer/security.log"
 mkdir -p "$(dirname "$SECURITY_LOG")" 2>/dev/null || true
 
@@ -36,8 +51,10 @@ remote_url() {
 }
 
 # True if a GitHub URL points outside our allowed owner.
+# Pre-init (ALLOW_GH_OWNER empty) treats EVERYTHING as upstream.
 gh_url_is_upstream() {
   local url="$1"
+  if [[ -z "$ALLOW_GH_OWNER" ]]; then return 0; fi
   case "$url" in
     *github.com:${ALLOW_GH_OWNER}/*|*github.com/${ALLOW_GH_OWNER}/*) return 1 ;;
     *github.com:*|*github.com/*) return 0 ;;
@@ -46,8 +63,10 @@ gh_url_is_upstream() {
 }
 
 # True if an OBS project name is outside our home: namespace.
+# Pre-init (ALLOW_OSC_PREFIX empty) treats EVERYTHING as upstream.
 osc_proj_is_upstream() {
   local proj="$1"
+  if [[ -z "$ALLOW_OSC_PREFIX" ]]; then return 0; fi
   case "$proj" in
     ${ALLOW_OSC_PREFIX}*) return 1 ;;
     *) return 0 ;;
@@ -242,8 +261,10 @@ while IFS= read -r sub; do
         *" pr merge "*|*" pr merge"*)
           emit_block "gh pr merge is forbidden — merging is a human decision." "$sub" ;;
         *" repo create "*|*" repo create"*)
-          # Allow only Spectro34/* repo creation if it ever needs to.
-          if [[ "$args" =~ " repo create "(Spectro34/[A-Za-z0-9._-]+) ]]; then
+          # Allow only configured-user/* repo creation. Pre-init blocks all.
+          if [[ -z "$ALLOW_GH_OWNER" ]]; then
+            emit_block "gh repo create is forbidden — workspace not initialized (run ./bin/setup.sh)." "$sub"
+          elif [[ "$args" =~ " repo create "(${ALLOW_GH_OWNER}/[A-Za-z0-9._-]+) ]]; then
             :  # allowed — proceed
           else
             emit_block "gh repo create is restricted to ${ALLOW_GH_OWNER}/* (got: $sub). Surface to PENDING_REVIEW.md instead." "$sub"
@@ -257,7 +278,7 @@ while IFS= read -r sub; do
       if [[ "$args" =~ --repo[[:space:]=]+([A-Za-z0-9._/-]+) ]]; then
         target="${BASH_REMATCH[1]}"
         owner="${target%%/*}"
-        if [[ "$owner" != "$ALLOW_GH_OWNER" ]]; then
+        if [[ -z "$ALLOW_GH_OWNER" ]] || [[ "$owner" != "$ALLOW_GH_OWNER" ]]; then
           # Read-only gh subcommands are fine even against upstream.
           case "$args" in
             *" pr view"*|*" pr list"*|*" pr diff"*|*" pr checks"*|*" pr status"*) : ;;
@@ -269,7 +290,7 @@ while IFS= read -r sub; do
             *" api "*) : ;;  # gh api is read-mostly; calling user must reason about it
             *" auth status"*) : ;;
             *)
-              # Any write-style gh subcommand against non-Spectro34 → block.
+              # Any write-style gh subcommand against non-configured-owner → block.
               # Catches: pr create/merge/close/edit/review,
               #          repo create/delete/edit/fork --remote=,
               #          issue create/edit/close/comment/develop/transfer,
@@ -285,7 +306,7 @@ while IFS= read -r sub; do
         # For high-risk write ops with no explicit --repo, surface a warning-block.
         case "$args" in
           *" issue create"*|*" issue close"*|*" issue comment"*|*" issue edit"*)
-            emit_block "gh issue write op without --repo is risky (could target wrong repo); use explicit --repo Spectro34/<name>." "$sub" ;;
+            emit_block "gh issue write op without --repo is risky (could target wrong repo); use explicit --repo ${ALLOW_GH_OWNER:-<configured-owner>}/<name>." "$sub" ;;
           *" release create"*|*" release delete"*|*" release upload"*|*" release edit"*)
             emit_block "gh release write op without --repo is risky." "$sub" ;;
           *" gist create"*|*" gist delete"*|*" gist edit"*)
@@ -303,8 +324,10 @@ while IFS= read -r sub; do
         *" copypac"*)
           emit_block "osc copypac is forbidden — could overwrite upstream packages." "$sub" ;;
         *" rdelete"*|*" delete "*|*" delete"*|*" undelete"*)
-          # Allow deletes only inside home:Spectro34:*
-          if [[ "$args" =~ (home:Spectro34[^[:space:]]*) ]]; then
+          # Allow deletes only inside the configured personal namespace.
+          if [[ -z "$ALLOW_OSC_PREFIX" ]]; then
+            emit_block "osc delete/rdelete is forbidden — workspace not initialized." "$sub"
+          elif [[ "$args" == *"$ALLOW_OSC_PREFIX"* ]]; then
             : # allowed personal namespace
           else
             emit_block "osc delete/rdelete is restricted to ${ALLOW_OSC_PREFIX}*." "$sub"

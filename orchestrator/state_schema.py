@@ -19,9 +19,19 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def default_role_entry(role: str, version: str | None = None, sle16_only: bool = False) -> dict[str, Any]:
+def default_role_entry(
+    role: str,
+    version: str | None = None,
+    sle16_only: bool = False,
+    github_user: str = "",
+    fork_branch: str = "fix/suse-support",
+) -> dict[str, Any]:
     """Per-role state structure. Every field that any sub-agent reads must
     have a default here so the first run never sees KeyError / None.
+
+    `github_user` and `fork_branch` come from state/config.json (loaded by
+    the caller via orchestrator.config). Pre-init or anonymous use leaves
+    fork_repo empty — sub-agents that need it bail out with PENDING.
     """
     return {
         "role": role,
@@ -29,8 +39,8 @@ def default_role_entry(role: str, version: str | None = None, sle16_only: bool =
         "sle16_only": sle16_only,
         "upstream_default_branch": "main",
         "last_seen_upstream_sha": None,
-        "fork_branch": "fix/suse-support",
-        "fork_repo": f"Spectro34/{role}",
+        "fork_branch": fork_branch,
+        "fork_repo": f"{github_user}/{role}" if github_user else "",
         "upstream_repo": None,  # populated when first seen
         "patched_files": [],
         "last_local_test": {},  # keyed by target → {result, at, sha, image, via}
@@ -39,11 +49,19 @@ def default_role_entry(role: str, version: str | None = None, sle16_only: bool =
     }
 
 
-def seed_roles_from_manifest(state: dict[str, Any], managed_roles: list[dict[str, Any]]) -> int:
+def seed_roles_from_manifest(
+    state: dict[str, Any],
+    managed_roles: list[dict[str, Any]],
+    github_user: str = "",
+    fork_branch: str = "fix/suse-support",
+) -> int:
     """Ensure every role in managed_roles[] has a per-role entry in state.roles.
     Returns the number of NEW entries created (not updates).
 
-    Called by the orchestrator after manifest-syncer returns.
+    Called by the orchestrator after manifest-syncer returns. The orchestrator
+    reads github_user and fork_branch from state/config.json (via
+    orchestrator.config.load_config) and passes them here.
+
     Existing entries are preserved; only missing fields are filled in from
     default_role_entry().
     """
@@ -53,16 +71,22 @@ def seed_roles_from_manifest(state: dict[str, Any], managed_roles: list[dict[str
         if not name:
             continue
         if name not in state["roles"]:
-            state["roles"][name] = default_role_entry(name, r.get("version"), r.get("sle16_only", False))
+            state["roles"][name] = default_role_entry(
+                name, r.get("version"), r.get("sle16_only", False),
+                github_user=github_user, fork_branch=fork_branch,
+            )
             created += 1
         else:
             # Fill in any missing fields from defaults (forward-compat).
-            defaults = default_role_entry(name)
+            defaults = default_role_entry(name, github_user=github_user, fork_branch=fork_branch)
             for k, v in defaults.items():
                 state["roles"][name].setdefault(k, v)
             # Keep version + sle16_only in sync with manifest.
             state["roles"][name]["version"] = r.get("version")
             state["roles"][name]["sle16_only"] = r.get("sle16_only", False)
+            # If github_user changed (account migration), update fork_repo too.
+            if github_user and not state["roles"][name].get("fork_repo"):
+                state["roles"][name]["fork_repo"] = f"{github_user}/{name}"
     return created
 
 
@@ -189,17 +213,22 @@ if __name__ == "__main__":
         {"name": "sudo", "version": "1.5.2", "sle16_only": False},
         {"name": "certificate", "version": "1.3.11", "sle16_only": True},
     ]
+    # Pre-init (no github_user) → fork_repo is empty.
     created = seed_roles_from_manifest(s2, manifest)
     assert created == 2, f"expected 2 new role entries, got {created}"
-    assert s2["roles"]["sudo"]["fork_repo"] == "Spectro34/sudo"
-    assert s2["roles"]["sudo"]["patched_files"] == []
-    assert s2["roles"]["sudo"]["pr_cursors"] == {}
-    assert s2["roles"]["certificate"]["sle16_only"] is True
+    assert s2["roles"]["sudo"]["fork_repo"] == "", "fork_repo should be empty pre-init"
+
+    # With a github_user, fork_repo is populated.
+    s3 = default_state()
+    seed_roles_from_manifest(s3, manifest, github_user="alice")
+    assert s3["roles"]["sudo"]["fork_repo"] == "alice/sudo"
+    assert s3["roles"]["certificate"]["sle16_only"] is True
+
     # Re-seed: idempotent, returns 0 new.
-    assert seed_roles_from_manifest(s2, manifest) == 0
+    assert seed_roles_from_manifest(s3, manifest, github_user="alice") == 0
     # Existing entry preserved across re-seed.
-    s2["roles"]["sudo"]["patched_files"] = ["library/scan_sudoers.py"]
-    seed_roles_from_manifest(s2, manifest)
-    assert s2["roles"]["sudo"]["patched_files"] == ["library/scan_sudoers.py"]
+    s3["roles"]["sudo"]["patched_files"] = ["library/scan_sudoers.py"]
+    seed_roles_from_manifest(s3, manifest, github_user="alice")
+    assert s3["roles"]["sudo"]["patched_files"] == ["library/scan_sudoers.py"]
 
     print("OK", p)

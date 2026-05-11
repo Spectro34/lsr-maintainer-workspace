@@ -9,7 +9,7 @@ nightly run
    │
    ▼
 pr-status-poller
-   │  fetches gh pr view for each open PR on Spectro34/*
+   │  fetches gh pr view for each open PR on ${github_user}/*
    │  diffs against state.roles[role].pr_cursors
    │  emits events
    ▼
@@ -49,13 +49,13 @@ state cursor updated; queue item removed; LSR_PROGRESS.md appended
 
 ## Inputs the agent uses
 
-- Open PR list: `gh pr list --author Spectro34 --state open --json url,number,baseRepository,...`
+- Open PR list: `gh pr list --author ${github_user} --state open --json url,number,baseRepository,...`
 - Per-PR details: `gh pr view <num> --repo <base> --json comments,reviews,reviewDecision,statusCheckRollup`
 - State cursors: `state.roles[role].pr_cursors[<num>] = {last_seen_comment_id, last_seen_review_id, last_seen_status_sha}`
 
 ## Outputs the agent produces
 
-- Commit on fork branch: `Spectro34/<role>@fix/suse-support` (force-pushes blocked by hook)
+- Commit on fork branch: `${github_user}/<role>@fix/suse-support` (force-pushes blocked by hook)
 - State update: cursor advanced, queue item removed
 - `state/PENDING_REVIEW.md` entry under "👀 Upstream review needs your eyes" with auto-fix status
 - Audit trail: full transcript at `~/.cache/lsr-maintainer/<ts>.jsonl`

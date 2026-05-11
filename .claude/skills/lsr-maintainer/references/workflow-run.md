@@ -151,7 +151,7 @@ verdict green → git push origin <fork-branch>
 ```
 Spawn obs-package-maintainer with:
    package=ansible-linux-system-roles,
-   obs_project=home:Spectro34:branches:devel:sap:ansible,
+   obs_project={obs_branch_project},
    failure_context={…last build state…}
    ↓
 Returns verdict succeeded/failed/needs_human
@@ -197,7 +197,7 @@ Append a session block to `projects/lsr-agent/LSR_PROGRESS.md`:
 ## Session 2026-05-12 03:07 (nightly auto)
 
 Queue processed: 3 items
-Pushed to forks: 1 (Spectro34/sudo @ fix/suse-support, commit abc123)
+Pushed to forks: 1 ({github_user}/sudo @ fix/suse-support, commit abc123)
 OBS rebuilt: 0
 New roles enabled: 0
 Health checks: 1 (sudo/sle-16 PASS, via fallback to Leap 16)

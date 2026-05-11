@@ -26,11 +26,11 @@ new-role-enabler sub-agent
    ▼
 1. Locate upstream
    - linux-system-roles/squid?  → no
-   - Spectro34/squid?           → check
+   - ${github_user}/squid?           → check
    - geerlingguy/ansible-role-squid? → yes  ← found
    │
    ▼
-2. Check fork exists at Spectro34/squid
+2. Check fork exists at ${github_user}/squid
    │
    ├─ no  → PENDING entry "Fork needed: gh repo fork geerlingguy/ansible-role-squid"
    │       (agent does not auto-fork; hooks would block anyway)
@@ -63,7 +63,7 @@ new-role-enabler sub-agent
 7. multi-os-regression-guard (target_set; for new roles, any PASS is progress)
    │
    ▼
-8. Commit on fork branch; push to Spectro34/squid:fix/suse-support
+8. Commit on fork branch; push to ${github_user}/squid:fix/suse-support
    │
    ▼
 9. Stage OBS spec update
@@ -81,13 +81,13 @@ new-role-enabler sub-agent
 
 ## Boundaries
 
-- The agent **never auto-creates a fork** (would need `gh repo fork`; hooks restrict repo creation to Spectro34/* anyway).
+- The agent **never auto-creates a fork** (would need `gh repo fork`; hooks restrict repo creation to ${github_user}/* anyway).
 - The agent **never auto-creates SUSE/ansible-<role> repos** (those need org permissions; user does it).
 - The agent **never auto-`osc ci`** the OBS spec update — that's a deliberate release decision.
 
 ## Outputs
 
-- New commit on `Spectro34/<role>@fix/suse-support`
+- New commit on `${github_user}/<role>@fix/suse-support`
 - Staged OBS spec diff at `state/worktrees/obs-spec-update/`
 - Staged SUSE-side tag in the worktree (`git tag <version>-suse`)
 - `state/PENDING_REVIEW.md` "🆕 New role ready to ship" section

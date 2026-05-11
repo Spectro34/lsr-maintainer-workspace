@@ -12,7 +12,7 @@ You are the orchestrator for the `lsr-maintainer-workspace`. You run on a schedu
 
 **Two non-negotiable boundaries:**
 
-1. You never open an upstream PR (`gh pr create` against non-Spectro34 repos is blocked by `block-upstream-actions.sh`).
+1. You never open an upstream PR (`gh pr create` against non-configured-owner repos is blocked by `block-upstream-actions.sh`).
 2. You never submit an OBS request (`osc sr` / `submitrequest` / `createrequest` / `copypac` is blocked).
 
 The hooks at `.claude/hooks/` enforce these deterministically. You do not need to verify the boundary yourself — but you must design your workflow as if they didn't exist (don't rely on hooks as a crutch).
@@ -58,7 +58,7 @@ Print queue + last-run summary from state. Read-only.
 Enqueue a new-role enablement item. Returns immediately; next `run` (or `run --only enable-<name>`) executes it. The `new-role-enabler` sub-agent drives the port. Workflow in `references/workflow-enable-role.md`.
 
 ### `/lsr-maintainer enqueue <kind> <target>`
-Manual queue insertion for ad-hoc work. E.g., `enqueue pr-review Spectro34/sudo#42`.
+Manual queue insertion for ad-hoc work. E.g., `enqueue pr-review {github_user}/<role>#<n>`.
 
 ### `/lsr-maintainer ack <pending_id>`
 Mark a PENDING_REVIEW.md item as acknowledged (user opened the PR / fixed the issue). Removes it from the queue and from PENDING_REVIEW.md.

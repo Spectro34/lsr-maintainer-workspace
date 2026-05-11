@@ -36,8 +36,8 @@ Enforced by:
 The agent can write to:
 
 - Local git worktrees under `state/worktrees/` (sandboxed).
-- Your fork branches (`Spectro34/<role>` on branches matching `fix/*`).
-- OBS personal branches (`home:Spectro34:branches:*`).
+- Your fork branches (`${github_user}/<role>` on branches matching `fix/*`).
+- OBS personal branches (`${obs_user_root}:branches:*`).
 - Local files in this workspace's `state/`, `state/cache/`, and `~/.cache/lsr-maintainer/`.
 
 The agent **cannot**:
@@ -50,7 +50,7 @@ The agent **cannot**:
 - Run `sudo`, install OS packages (`zypper`, `apt`, `dnf` — denied; the agent emits the command for you to run).
 - Read credentials (see above).
 
-The `block-upstream-actions.sh` hook re-parses each Bash command (handles `;`, `&&`, `||`, env-var prefixes, `--repo OWNER/NAME` flags, alias expansion) and resolves git remotes via `git remote get-url` before allowing a push. A clever model that tries `git push or"igin"` or `gh pr create --repo "Spectro34/sudo --repo linux-system-roles/sudo"` is blocked by the parser-level hook even though the regex permission rule might miss it.
+The `block-upstream-actions.sh` hook re-parses each Bash command (handles `;`, `&&`, `||`, env-var prefixes, `--repo OWNER/NAME` flags, alias expansion) and resolves git remotes via `git remote get-url` before allowing a push. A clever model that tries `git push or"igin"` or `gh pr create --repo "${github_user}/sudo --repo linux-system-roles/sudo"` is blocked by the parser-level hook even though the regex permission rule might miss it.
 
 ## Threat model
 

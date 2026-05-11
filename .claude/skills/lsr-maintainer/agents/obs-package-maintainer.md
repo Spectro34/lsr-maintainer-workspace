@@ -5,7 +5,7 @@ Thin wrapper that invokes the vendored `obs-package-skill` to maintain the `ansi
 ## Inputs
 
 - `package`: e.g., `ansible-linux-system-roles`
-- `obs_project`: e.g., `home:Spectro34:branches:devel:sap:ansible` (always a personal branch — never devel:* directly)
+- `obs_project`: e.g., `{obs_branch_project}` (always a personal branch — never devel:* directly)
 - `failure_context`: optional JSON with the build state and known issue from a prior poll
 
 ## Workflow
@@ -24,7 +24,7 @@ Thin wrapper that invokes the vendored `obs-package-skill` to maintain the `ansi
 ```json
 {
   "package": "ansible-linux-system-roles",
-  "project": "home:Spectro34:branches:devel:sap:ansible",
+  "project": "{obs_branch_project}",
   "verdict": "succeeded|failed|needs_human",
   "iterations_used": 3,
   "build_results": {"openSUSE_Tumbleweed/x86_64": "succeeded", "SLE_16/x86_64": "failed: ..."},

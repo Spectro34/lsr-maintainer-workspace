@@ -11,10 +11,10 @@ Single JSON file at `state/.lsr-maintainer-state.json`. Source of truth across s
   "last_run_completed_at": "2026-05-12T04:33:12+02:00",
   "queue": [
     {
-      "id": "pr-Spectro34-sudo-12",
+      "id": "pr-${github_user}-sudo-12",
       "priority": 0,
       "kind": "reviewer_change_requested",
-      "pr": {"repo": "linux-system-roles/sudo", "number": 12, "head": "Spectro34:fix/suse-support", "url": "..."},
+      "pr": {"repo": "linux-system-roles/sudo", "number": 12, "head": "${github_user}:fix/suse-support", "url": "..."},
       "comments_text": "...",
       "discovered_at": "2026-05-11T22:14:00+02:00"
     }
