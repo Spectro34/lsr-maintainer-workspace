@@ -25,11 +25,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 EVENT_KINDS = (
-    "reject",          # review board rejected a patch
-    "anomaly",         # metric exceeded threshold
-    "doctor_red",     # cron pre-flight failed
-    "halt",            # agent auto-engaged kill switch
-    "daily_summary",   # nightly run summary
+    "reject",              # review board rejected a patch
+    "anomaly",             # metric exceeded threshold
+    "doctor_red",          # cron pre-flight failed
+    "halt",                # agent auto-engaged kill switch
+    "daily_summary",       # nightly run summary
+    "host_lock_mismatch",  # config.security.enforce_host_lock tripped
 )
 
 

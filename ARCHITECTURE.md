@@ -73,12 +73,14 @@ Cap: 6 concurrent sub-agents (prevents tox-QEMU resource starvation, stays under
 
 ## Review board
 
-Every patch from `bug-fix-implementer` runs through 4 reviewers in parallel before the tox regression matrix:
+Every patch from `bug-fix-implementer` runs through 5 reviewers in parallel before the tox regression matrix:
 
 1. **reviewer-correctness** — does the diff fix the stated problem?
 2. **reviewer-cross-os-impact** — does it break SLE 15 / Leap 15 / RHEL?
 3. **reviewer-upstream-style** — does it follow LSR conventions (set_vars pattern, vars/ layout, meta platforms)?
 4. **reviewer-security** — does it introduce shell injection, world-writable files, broad firewall opens, credential templates?
+
+5. **reviewer-sle-docs** — does the SLE-affecting code follow SLE 16 documented practice? (Consults `documentation.suse.com` via WebFetch; skips for non-SLE patches.) See [docs/component-subagents.md](docs/component-subagents.md) and `.claude/skills/lsr-maintainer/agents/reviewer-sle-docs.md`.
 
 Verdict merge:
 
@@ -117,3 +119,8 @@ See [SECURITY.md](SECURITY.md) and [docs/component-hooks.md](docs/component-hook
 - **Time budget**: default 90 min per run from `config.schedule.time_budget_minutes`; per-item soft caps from `config.schedule.per_item_budgets`.
 - **Resumability**: state is the source of truth across runs. Each run reads `last_run_completed_at`, `last_run_aborted`, the priority queue, per-PR cursors, per-role tested-SHAs. A missed run picks up where the last successful one left off.
 - **Identity**: read from `state/config.json` at the start of every run. Pre-init (empty `github.user`) makes all hooks treat every write as upstream — uninitialized = safest state.
+- **Fork sync (Phase 2)**: after `manifest-syncer` writes back `state.obs.managed_roles[]`, the `fork-sync-checker` sub-agent ensures `${github_user}/<role>` exists for every managed role and fast-forwards its `main` branch to `linux-system-roles/<role>:main`. Divergent forks surface to PENDING. See [docs/feature-fork-sync.md](docs/feature-fork-sync.md).
+- **Enablement queue (Phase 2)**: `config.enablement.queue[]` is a user-editable list of roles to enable for SLE 16. The orchestrator pops `auto_enqueue_per_run` per night and enqueues `enable_role` events for `new-role-enabler`. Success removes the role from the list; failures retry. See [docs/feature-role-enablement.md](docs/feature-role-enablement.md).
+- **Host lock (Phase 0a, opt-in)**: when `config.security.enforce_host_lock: true`, the workspace fingerprint must match `state.host.fingerprint` or the run exits 1 before any state mutation. See [docs/feature-host-lock.md](docs/feature-host-lock.md).
+- **Cost tracking (Phase 4)**: every run writes per-run token usage + dollar cost to `state/cost-history.jsonl`. The 7-day rolling sum surfaces in PENDING. See [docs/feature-cost-tracking.md](docs/feature-cost-tracking.md).
+- **Notifications (Phase 4)**: out-of-band ntfy/email/webhook dispatch on `reject`/`anomaly`/`halt`/`host_lock_mismatch`/`daily_summary`. Opt-in via `config.notify`. See [docs/feature-notifications.md](docs/feature-notifications.md).

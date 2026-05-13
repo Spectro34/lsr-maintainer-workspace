@@ -563,6 +563,77 @@ case "$LOG_RESULT" in
     echo "FAIL  lsr_path log_dir expected '$WORKSPACE/var/log' got '$LOG_RESULT'" ;;
 esac
 
+# ---- gh repo fork narrow whitelist ----
+echo "== gh repo fork whitelist (managed roles only) =="
+FORK_STATE="$(mktemp -t lsr-test-fork-state.XXXXXX.json)"
+FORK_CONFIG="$(mktemp -t lsr-test-fork-config.XXXXXX.json)"
+cat > "$FORK_STATE" <<'EOF'
+{"version":1,"obs":{"managed_roles":[{"name":"sudo"},{"name":"logging"}]},"roles":{"sudo":{}}}
+EOF
+cat > "$FORK_CONFIG" <<'EOF'
+{"version":3,"github":{"user":"Spectro34","tracked_extra_roles":["kernel_settings"]},"obs":{"user":"spectro34","personal_project_root":"home:Spectro34"}}
+EOF
+
+# Allowed: managed roles in state.obs.managed_roles[] and tracked_extra_roles in config.
+FORK_ALLOW=(
+  '{"tool_name":"Bash","tool_input":{"command":"gh repo fork linux-system-roles/sudo --clone=false"}}|fork sudo (in managed_roles)'
+  '{"tool_name":"Bash","tool_input":{"command":"gh repo fork linux-system-roles/logging"}}|fork logging (in managed_roles)'
+  '{"tool_name":"Bash","tool_input":{"command":"gh repo fork linux-system-roles/kernel_settings"}}|fork kernel_settings (in tracked_extra_roles)'
+  '{"tool_name":"Bash","tool_input":{"command":"gh repo fork linux-system-roles/SUDO"}}|fork SUDO (case-insensitive match)'
+  '{"tool_name":"Bash","tool_input":{"command":"gh  repo  fork  linux-system-roles/sudo"}}|fork double-space (whitespace bypass attempt)'
+  '{"tool_name":"Bash","tool_input":{"command":"gh\trepo\tfork\tlinux-system-roles/sudo"}}|fork tab-separated args'
+)
+for entry in "${FORK_ALLOW[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(LSR_CONFIG_OVERRIDE="$FORK_CONFIG" LSR_STATE_OVERRIDE="$FORK_STATE" bash "$UPSTREAM" <<<"$json" >/dev/null 2>&1; echo $?)
+  check "ALLOW $desc" "0" "$code"
+done
+
+# Denied: non-managed roles, non-LSR owners, hostile flags, missing state file (managed_roles unknown).
+FORK_DENY=(
+  '{"tool_name":"Bash","tool_input":{"command":"gh repo fork linux-system-roles/totally-fake"}}|fork unmanaged role'
+  '{"tool_name":"Bash","tool_input":{"command":"gh repo fork some-other-org/sudo"}}|fork non-LSR upstream'
+  '{"tool_name":"Bash","tool_input":{"command":"gh repo fork linux-system-roles/sudo --org evilorg"}}|fork --org hostile flag (space form)'
+  '{"tool_name":"Bash","tool_input":{"command":"gh repo fork linux-system-roles/sudo --org=evilorg"}}|fork --org=evilorg (equals form)'
+  '{"tool_name":"Bash","tool_input":{"command":"gh repo fork"}}|fork bare (no target)'
+)
+for entry in "${FORK_DENY[@]}"; do
+  desc="${entry##*|}"; json="${entry%|*}"
+  code=$(LSR_CONFIG_OVERRIDE="$FORK_CONFIG" LSR_STATE_OVERRIDE="$FORK_STATE" bash "$UPSTREAM" <<<"$json" >/dev/null 2>&1; echo $?)
+  check "DENY  $desc" "2" "$code"
+done
+
+# Missing state file → no managed_roles known → only tracked_extra_roles allowed.
+MISSING_STATE="/tmp/nonexistent-state-$$.json"
+code=$(LSR_CONFIG_OVERRIDE="$FORK_CONFIG" LSR_STATE_OVERRIDE="$MISSING_STATE" bash "$UPSTREAM" \
+  <<<'{"tool_name":"Bash","tool_input":{"command":"gh repo fork linux-system-roles/sudo"}}' >/dev/null 2>&1; echo $?)
+check "DENY  fork without state.json (sudo not in tracked_extra_roles)" "2" "$code"
+code=$(LSR_CONFIG_OVERRIDE="$FORK_CONFIG" LSR_STATE_OVERRIDE="$MISSING_STATE" bash "$UPSTREAM" \
+  <<<'{"tool_name":"Bash","tool_input":{"command":"gh repo fork linux-system-roles/kernel_settings"}}' >/dev/null 2>&1; echo $?)
+check "ALLOW fork without state.json (kernel_settings in tracked_extra_roles)" "0" "$code"
+
+# Pre-init: empty github.user blocks ALL forks.
+PREINIT_FORK_CFG="$(mktemp -t lsr-test-preinit-fork.XXXXXX.json)"
+echo '{"version":3,"github":{"user":""}}' > "$PREINIT_FORK_CFG"
+code=$(LSR_CONFIG_OVERRIDE="$PREINIT_FORK_CFG" LSR_STATE_OVERRIDE="$FORK_STATE" bash "$UPSTREAM" \
+  <<<'{"tool_name":"Bash","tool_input":{"command":"gh repo fork linux-system-roles/sudo"}}' >/dev/null 2>&1; echo $?)
+check "DENY  fork pre-init (empty github.user)" "2" "$code"
+rm -f "$PREINIT_FORK_CFG"
+
+rm -f "$FORK_STATE" "$FORK_CONFIG"
+
+# ---- settings.json portability: no literal /home/<user>/ paths ----
+echo "== .claude/settings.json portability =="
+if grep -nE '/home/[a-zA-Z][a-zA-Z0-9._-]+/' "$WORKSPACE/.claude/settings.json" >/dev/null; then
+  FAIL=$((FAIL+1))
+  FAIL_LINES+=("FAIL  settings.json has hardcoded /home/<user>/ path:")
+  FAIL_LINES+=("$(grep -nE '/home/[a-zA-Z][a-zA-Z0-9._-]+/' "$WORKSPACE/.claude/settings.json")")
+  echo "FAIL  settings.json has hardcoded /home/<user>/ path"
+else
+  PASS=$((PASS+1))
+  echo "PASS  settings.json has no hardcoded /home/<user>/ paths"
+fi
+
 # ---------------------------------------------------------------- summary
 echo ""
 echo "============================================"

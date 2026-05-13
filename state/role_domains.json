@@ -1,0 +1,102 @@
+{
+  "logging": {
+    "topics": ["rsyslog", "journald", "systemd-journal"],
+    "url_hints": [
+      "documentation.suse.com/sles/16/single-html/SLES-administration",
+      "documentation.suse.com/sles/16/html/SLES-all/cha-journalctl.html"
+    ],
+    "services": ["rsyslog.service", "systemd-journald.service"],
+    "packages": ["rsyslog", "systemd"]
+  },
+  "firewall": {
+    "topics": ["firewalld"],
+    "url_hints": [
+      "documentation.suse.com/sles/16/single-html/SLES-administration",
+      "documentation.suse.com/sles/16/html/SLES-all/sec-firewall.html"
+    ],
+    "services": ["firewalld.service"],
+    "packages": ["firewalld"]
+  },
+  "selinux": {
+    "topics": ["SELinux", "AppArmor", "MAC"],
+    "url_hints": [
+      "documentation.suse.com/sles/16/single-html/SLES-security",
+      "documentation.suse.com/sles/16/html/SLES-all/part-security.html"
+    ],
+    "services": [],
+    "packages": ["selinux-policy", "policycoreutils"]
+  },
+  "kdump": {
+    "topics": ["kdump", "kexec", "crashdump"],
+    "url_hints": [
+      "documentation.suse.com/sles/16/html/SLES-all/cha-tuning-kexec.html"
+    ],
+    "services": ["kdump.service"],
+    "packages": ["kdump", "kexec-tools", "makedumpfile"]
+  },
+  "network": {
+    "topics": ["NetworkManager", "wicked", "systemd-networkd"],
+    "url_hints": [
+      "documentation.suse.com/sles/16/html/SLES-all/cha-network.html",
+      "documentation.suse.com/sles/16/html/SLES-all/cha-network-manager.html"
+    ],
+    "services": ["NetworkManager.service", "wicked.service"],
+    "packages": ["NetworkManager", "wicked"]
+  },
+  "metrics": {
+    "topics": ["pcp", "Performance Co-Pilot", "node_exporter"],
+    "url_hints": [
+      "documentation.suse.com/sles/16/html/SLES-all/part-system.html"
+    ],
+    "services": ["pmcd.service", "pmlogger.service"],
+    "packages": ["pcp", "pcp-conf"]
+  },
+  "kernel_settings": {
+    "topics": ["sysctl", "tuned", "kernel parameters"],
+    "url_hints": [
+      "documentation.suse.com/sles/16/html/SLES-all/cha-tuning-tuned.html"
+    ],
+    "services": ["tuned.service"],
+    "packages": ["tuned", "procps"]
+  },
+  "certificate": {
+    "topics": ["PKI", "certmonger", "openssl", "ca-certificates"],
+    "url_hints": [
+      "documentation.suse.com/sles/16/html/SLES-all/cha-security-cms.html"
+    ],
+    "services": ["certmonger.service"],
+    "packages": ["certmonger", "openssl"]
+  },
+  "ad_integration": {
+    "topics": ["Active Directory", "SSSD", "realmd", "samba-winbind"],
+    "url_hints": [
+      "documentation.suse.com/sles/16/html/SLES-all/cha-ad.html"
+    ],
+    "services": ["sssd.service", "realmd.service"],
+    "packages": ["sssd", "realmd", "adcli"]
+  },
+  "postgresql": {
+    "topics": ["postgresql", "pg_hba"],
+    "url_hints": [
+      "documentation.suse.com/sles/16/html/SLES-all/cha-postgresql.html"
+    ],
+    "services": ["postgresql.service"],
+    "packages": ["postgresql-server", "postgresql"]
+  },
+  "ansible-sshd": {
+    "topics": ["openssh", "sshd", "sshd_config"],
+    "url_hints": [
+      "documentation.suse.com/sles/16/html/SLES-all/cha-ssh.html"
+    ],
+    "services": ["sshd.service"],
+    "packages": ["openssh"]
+  },
+  "sudo": {
+    "topics": ["sudo", "sudoers"],
+    "url_hints": [
+      "documentation.suse.com/sles/16/html/SLES-all/cha-security-sudo.html"
+    ],
+    "services": [],
+    "packages": ["sudo"]
+  }
+}

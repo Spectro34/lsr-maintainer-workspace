@@ -146,6 +146,16 @@ if [[ -f state/.halt ]]; then
   emit_warn "halt switch"           "ACTIVE — ${reason:-no reason given}; rm state/.halt to resume"
 fi
 
+# 11b. .claude/settings.json portability — must not hardcode /home/<user>/
+if [[ -f .claude/settings.json ]]; then
+  if grep -qE '/home/[a-zA-Z][a-zA-Z0-9._-]+/' .claude/settings.json; then
+    bad="$(grep -nE '/home/[a-zA-Z][a-zA-Z0-9._-]+/' .claude/settings.json | head -1)"
+    emit_warn "settings portability"   "literal /home/<user>/ at $bad — use ~/ instead"
+  else
+    emit_pass "settings portability"   "no hardcoded /home/<user>/ paths"
+  fi
+fi
+
 # 12. Hook + settings drift vs committed HEAD (pairs with C-PROD-1)
 drift=""
 for f in .claude/settings.json \

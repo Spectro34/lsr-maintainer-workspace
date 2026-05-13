@@ -44,6 +44,7 @@ The agent **cannot**:
 
 - Open or merge a PR (`gh pr create`, `gh pr merge` — denied + hook-blocked).
 - Create or delete a GitHub repo (`gh repo create`, `gh repo delete` — denied).
+- Fork an arbitrary GitHub repo. `gh repo fork` is narrowly whitelisted to `linux-system-roles/<role>` where `<role>` is in the OBS manifest or `config.github.tracked_extra_roles`. See [docs/feature-fork-sync.md](docs/feature-fork-sync.md) and [docs/component-hooks.md](docs/component-hooks.md).
 - Submit an OBS request (`osc sr`, `osc submitrequest`, `osc submitreq`, `osc createrequest` — denied + hook-blocked).
 - Copy or delete OBS packages (`osc copypac`, `osc delete`, `osc rdelete`, `osc undelete` — denied).
 - Push to a non-fork remote (`git push upstream`, `git push --force` — denied + hook resolves remote URL to confirm).
@@ -81,6 +82,12 @@ mkdir -p /var/log/lsr-maintainer && ln -s /var/log/lsr-maintainer var/log
 ```
 
 Mirror copy: each hook also pipes its decision to `systemd-cat -t lsr-maintainer-security`, so the journal entry survives even if the local log is wiped.
+
+## Optional defense-in-depth: same-machine host lock
+
+`config.security.enforce_host_lock: true` pins the workspace to the host it was set up on. If the workspace state is copied to another machine (rsync, container image, accidental clone), the next run aborts at Phase 0 before any state mutation — and fires `notify(host_lock_mismatch)` so you find out.
+
+Default: `false` (does not break existing installs). Opt in once your fingerprint is stable. Recovery on a deliberate move: `make ack-host-lock` from a TTY. Full design in [docs/feature-host-lock.md](docs/feature-host-lock.md).
 
 ## Revocation
 

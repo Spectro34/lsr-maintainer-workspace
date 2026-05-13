@@ -6,7 +6,7 @@ The workspace is **identity-agnostic** until `./bin/setup.sh` runs. After init, 
 
 ```json
 {
-  "version": 1,
+  "version": 3,
   "github": {
     "user":            "alice",
     "fork_pattern":    "{user}/{role}",
@@ -53,6 +53,32 @@ The workspace is **identity-agnostic** until `./bin/setup.sh` runs. After init, 
   "review_board": {
     "max_concern_iterations":  2,
     "concurrent_cap":          6
+  },
+  "enablement": {
+    "queue":                ["logging", "kdump"],
+    "auto_enqueue_per_run": 1,
+    "default_target":       "sle16"
+  },
+  "fork_sync": {
+    "auto_push":   true,
+    "max_per_run": 5
+  },
+  "security": {
+    "enforce_host_lock": false
+  },
+  "notify": {
+    "backend":  "",
+    "events":   ["reject", "anomaly", "doctor_red", "halt", "daily_summary", "host_lock_mismatch"],
+    "ntfy":     {"url": "", "priority": "default"},
+    "email":    {"to": ""},
+    "webhook":  {"url": ""}
+  },
+  "anomaly": {
+    "enabled":               true,
+    "default_sigma":         3.0,
+    "min_samples":           7,
+    "history_days":          14,
+    "auto_halt_on_anomaly":  false
   }
 }
 ```
@@ -73,6 +99,11 @@ Most of the defaults are sensible, but these are the typical overrides:
 | `test_targets.fallback` | Map target → fallback target when image is missing. Default `{sle-16: leap-16.0}`. |
 | `test_targets.auto_download.leap-16.0` | URL and size_mb for auto-fetch. Set to `null` to disable. |
 | `review_board.max_concern_iterations` | Default 2. How many re-iterations a `bug-fix-implementer` patch may go through before falling out to manual triage. |
+| `enablement.queue` | User-editable list of role names to enable for SLE 16. Nightly run pops `auto_enqueue_per_run` per night. See [docs/feature-role-enablement.md](feature-role-enablement.md). |
+| `fork_sync.auto_push` | Fast-forwarded fork mains auto-push to `${github_user}/<role>:main`. Default `true`. See [docs/feature-fork-sync.md](feature-fork-sync.md). |
+| `fork_sync.max_per_run` | Cap on roles handled per nightly run. Default 5. |
+| `security.enforce_host_lock` | Pin the workspace to its setup host. Default `false`. See [docs/feature-host-lock.md](feature-host-lock.md). |
+| `notify.backend` | `ntfy`/`email`/`webhook`/`""`. See [docs/feature-notifications.md](feature-notifications.md). |
 
 ## How identity is detected
 
@@ -112,7 +143,7 @@ get_path(cfg, "iso_dir")    # → "/home/alice/github/lsr-maintainer-workspace/v
 
 Shell side: `source bin/_lib/paths.sh` then `lsr_path iso_dir`. The same resolver is used everywhere — config defaults, scripts, hooks, and skill MD agents all agree on the same canonical paths.
 
-**Migration:** `_migrate()` upgrades v1 configs (which had `~/iso`, `~/github/ansible/...` literals) to the v2 `{workspace}` placeholders, but ONLY for values that still match the legacy defaults. Custom overrides are preserved verbatim.
+**Migration:** `_migrate()` upgrades v1 configs (which had `~/iso`, `~/github/ansible/...` literals) to the v2 `{workspace}` placeholders, but ONLY for values that still match the legacy defaults. Custom overrides are preserved verbatim. v3 just adds new sections (`enablement`, `fork_sync`, `security`) via `_merge_defaults` — no field rewrites.
 
 ## Reading config from hooks (bash)
 

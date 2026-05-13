@@ -38,13 +38,13 @@
       "Bash(cat ~/.config/gh/*)",
       "Bash(cat ~/.ssh/id_*)",
       "Bash(cat ~/.aws/*)",
-      "Read(/home/spectro/.config/osc/oscrc)",
-      "Read(/home/spectro/.netrc)",
-      "Read(/home/spectro/.config/gh/hosts.yml)",
-      "Read(/home/spectro/.ssh/id_*)",
-      "Read(/home/spectro/.gnupg/**)",
-      "Read(/home/spectro/.aws/**)",
-      "Read(/home/spectro/.azure/**)"
+      "Read(~/.config/osc/oscrc)",
+      "Read(~/.netrc)",
+      "Read(~/.config/gh/hosts.yml)",
+      "Read(~/.ssh/id_*)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.azure/**)"
     ],
     "allow": [
       "Bash(git push origin*)",

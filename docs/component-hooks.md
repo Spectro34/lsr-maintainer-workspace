@@ -18,6 +18,7 @@ Blocks:
 | `osc lock`/`unlock` | Pattern (shared-state change) |
 | `git push --force` / `-f` / `--force-with-lease` | Pattern |
 | `git push <remote>` where remote URL ∉ ${github_user}/* | Resolves `git remote get-url <name>`, compares against allowlist |
+| `gh repo fork <something-not-in-managed-roles>` | Narrow whitelist: only `linux-system-roles/<role>` where `<role>` ∈ `state.obs.managed_roles[]` ∪ `state.roles[]` keys ∪ `config.github.tracked_extra_roles`. Hostile flags (`--org other`) and bare `gh repo fork` are blocked. |
 | `git push <remote>` where remote name ∈ {upstream, original, UPSTREAM} | Name blacklist (defensive) |
 | `rm -rf /`, `rm -rf $HOME`, `rm -rf ~` | Literal-string match |
 | `sudo *`, `zypper`, `apt`, `dnf`, `yum` | Always blocked — agent surfaces install cmds, doesn't run them |

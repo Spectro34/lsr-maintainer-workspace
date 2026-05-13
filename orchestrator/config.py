@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 from typing import Any
 
-CONFIG_VERSION = 2  # v2: paths use {workspace} placeholder; adds log_dir/cache_dir.
+CONFIG_VERSION = 3  # v3: adds enablement.queue + fork_sync + security.enforce_host_lock.
 
 
 def default_config() -> dict[str, Any]:
@@ -123,10 +123,34 @@ def default_config() -> dict[str, Any]:
         # `backend` to enable. Falls back silently if backend unavailable.
         "notify": {
             "backend": "",           # "ntfy" | "email" | "webhook" | ""
-            "events": ["reject", "anomaly", "doctor_red", "halt", "daily_summary"],
+            "events": ["reject", "anomaly", "doctor_red", "halt", "daily_summary", "host_lock_mismatch"],
             "ntfy":    {"url": "", "priority": "default"},
             "email":   {"to": ""},
             "webhook": {"url": ""},
+        },
+        # User-editable enablement queue. Add role names here to have the
+        # nightly run enable them for SLE via `new-role-enabler`. The
+        # orchestrator pops up to `auto_enqueue_per_run` per night and
+        # surfaces "📋 Enablement queue" in PENDING_REVIEW.md. Entries are
+        # removed only on `verdict: enabled` (success); failures stay so the
+        # next run retries. Manual removal: `make ack-enablement ROLE=x`.
+        "enablement": {
+            "queue": [],
+            "auto_enqueue_per_run": 1,
+            "default_target": "sle16",
+        },
+        # Fork-sync policy. fork-sync-checker keeps managed-role forks in
+        # sync with linux-system-roles upstream main. Only fast-forwards
+        # auto-push; divergent forks surface to PENDING for human review.
+        "fork_sync": {
+            "auto_push": True,
+            "max_per_run": 5,
+        },
+        # Opt-in host-lock enforcement. When True, runs abort if the host
+        # fingerprint (hostname + primary MAC + /etc/os-release ID/VERSION)
+        # differs from state.host.fingerprint. Recovery: `make ack-host-lock`.
+        "security": {
+            "enforce_host_lock": False,
         },
     }
 
@@ -372,6 +396,49 @@ def obs_branch_project(cfg: dict[str, Any]) -> str:
     return cfg["obs"]["branch_project_pattern"].format(user=user, source=source)
 
 
+# Enablement-queue helpers (v3) ---------------------------------------------
+
+def pop_enablement_role(
+    cfg: dict[str, Any],
+    managed_role_names: set[str] | list[str],
+    queued_role_names: set[str] | list[str],
+) -> str | None:
+    """Peek the next eligible role in `config.enablement.queue`, skipping
+    roles already in the OBS manifest or already enqueued for this run.
+
+    Does NOT remove the role from the list — `ack_enablement_role()` does
+    that, and only on successful enablement. Failures leave the role in
+    place so the next nightly run retries.
+    """
+    managed = set(managed_role_names)
+    queued = set(queued_role_names)
+    for role in cfg.get("enablement", {}).get("queue", []) or []:
+        if not role:
+            continue
+        if role in managed:
+            continue
+        if role in queued:
+            continue
+        return role
+    return None
+
+
+def ack_enablement_role(cfg_path: str, role: str) -> bool:
+    """Remove `role` from `config.enablement.queue` and save the config.
+
+    Returns True if the role was present and removed, False otherwise.
+    The caller is responsible for holding state_lock if cross-process
+    safety matters (config and state share the same lock window).
+    """
+    cfg = load_config(cfg_path)
+    queue = cfg.get("enablement", {}).get("queue", []) or []
+    if role not in queue:
+        return False
+    cfg["enablement"]["queue"] = [r for r in queue if r != role]
+    save_config(cfg_path, cfg)
+    return True
+
+
 if __name__ == "__main__":
     # Self-test.
     tmpdir = tempfile.mkdtemp()
@@ -448,5 +515,56 @@ if __name__ == "__main__":
     assert migrated["paths"]["iso_dir"] == "{workspace}/var/iso", migrated["paths"]["iso_dir"]
     assert migrated["paths"]["ansible_root"] == "{workspace}/var/ansible"
     assert migrated["paths"]["tox_venv"] == "/custom/override/venv", "custom override must be preserved"
+
+    # === v3 sections present in defaults ===
+    d = default_config()
+    assert d["enablement"] == {"queue": [], "auto_enqueue_per_run": 1, "default_target": "sle16"}
+    assert d["fork_sync"]["auto_push"] is True
+    assert d["fork_sync"]["max_per_run"] == 5
+    assert d["security"]["enforce_host_lock"] is False
+    assert "host_lock_mismatch" in d["notify"]["events"]
+
+    # === v2 → v3 migration: new sections appear, existing fields preserved ===
+    v2 = {
+        "version": 2,
+        "github": {"user": "carol"},
+        "paths": {"iso_dir": "{workspace}/var/iso"},
+    }
+    v2_path = os.path.join(tmpdir, "v2.json")
+    with open(v2_path, "w") as f:
+        json.dump(v2, f)
+    upgraded = load_config(v2_path)
+    assert upgraded["github"]["user"] == "carol", "existing identity must be preserved"
+    assert "enablement" in upgraded, "v3 migration must add enablement"
+    assert upgraded["enablement"]["queue"] == []
+    assert upgraded["fork_sync"]["auto_push"] is True
+    assert upgraded["security"]["enforce_host_lock"] is False
+
+    # === pop_enablement_role ===
+    cfg_e = default_config()
+    cfg_e["enablement"]["queue"] = ["logging", "kdump", "selinux"]
+    # No roles managed yet → pop returns "logging".
+    assert pop_enablement_role(cfg_e, [], []) == "logging"
+    # `logging` already in OBS manifest → skip to kdump.
+    assert pop_enablement_role(cfg_e, ["logging"], []) == "kdump"
+    # `logging` queued this run → also skip.
+    assert pop_enablement_role(cfg_e, [], ["logging"]) == "kdump"
+    # All managed → None.
+    assert pop_enablement_role(cfg_e, ["logging", "kdump", "selinux"], []) is None
+    # Empty list → None.
+    cfg_empty = default_config()
+    assert pop_enablement_role(cfg_empty, [], []) is None
+
+    # === ack_enablement_role: idempotent removal ===
+    ack_cfg = default_config()
+    ack_cfg["enablement"]["queue"] = ["logging", "kdump"]
+    ack_cfg["github"]["user"] = "alice"  # avoid pre-init nuance in save
+    ack_path = os.path.join(tmpdir, "ack.json")
+    save_config(ack_path, ack_cfg)
+    assert ack_enablement_role(ack_path, "logging") is True
+    re_loaded = load_config(ack_path)
+    assert re_loaded["enablement"]["queue"] == ["kdump"], re_loaded["enablement"]["queue"]
+    # Ack-ing a role not in queue → False, no change.
+    assert ack_enablement_role(ack_path, "logging") is False
 
     print("OK", p)

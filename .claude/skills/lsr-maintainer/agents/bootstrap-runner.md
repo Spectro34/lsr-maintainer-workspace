@@ -8,7 +8,7 @@ Idempotent host preparation. Safe to run repeatedly. Designed for `/lsr-maintain
 
 ## Workflow
 
-1. **Detect host** — read `/etc/os-release` for `ID` and `VERSION_ID`. Compute `host_fingerprint` = sha256 of `(hostname, primary-mac, ID, VERSION_ID)`.
+1. **Detect host** — read `/etc/os-release` for `ID` and `VERSION_ID`. Compute `host_fingerprint` via `python3 -m orchestrator.host_lock --compute` (sha256 of `(hostname, primary-mac, ID, VERSION_ID)`). The Python module is the single source of truth so `config.security.enforce_host_lock` (checked in workflow-run.md Phase 0a) sees the same formula.
 2. **System packages** — check for presence of `git`, `python3`, `gh`, `osc`, `make`, `jq`, `qemu-system-x86`. If any missing, emit a PENDING entry with the exact install command for the detected OS. Do NOT run sudo/zypper/apt/dnf — those are blocked.
 3. **Directories** — `bin/install-deps.sh` already handles this on first install; replay the logic here for idempotency (mkdir -p ...).
 4. **Symlink target check** — `projects/lsr-agent` should resolve. If broken (running on a host without `~/github/rnd/lsr-agent/`), emit PENDING "Clone the upstream skill-lifecycle-framework repo (whichever fork you use) to ~/github/rnd/ for the lsr-agent symlink to resolve."

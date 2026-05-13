@@ -90,6 +90,11 @@ def default_role_entry(
         "last_local_test": {},  # keyed by target → {result, at, sha, image, via}
         "pr_cursors": {},       # keyed by PR number → {last_seen_*}
         "fix_attempts_by_pr": {},  # keyed by PR number → count (for retry caps)
+        # Fork-sync state (v3). fork-sync-checker writes here.
+        "fork_exists": False,
+        "fork_last_sync_at": None,           # iso8601
+        "fork_sync_status": "unknown",       # in_sync|behind|ahead|diverged|conflict|missing|unknown
+        "fork_sync_compare": {},             # {behind_by, ahead_by}
     }
 
 

@@ -1,6 +1,6 @@
 ---
 name: lsr-maintainer
-description: Scheduled autonomous maintenance of Linux System Roles forks and the OBS ansible-linux-system-roles package. Drives upstream-drift detection, PR-feedback auto-fix loops (with a 4-perspective review board), OBS build-failure repairs, new-role enablement, and self-bootstrap into a fresh VM. Never opens upstream PRs or OBS submit requests — that boundary is enforced by hooks at .claude/hooks/. Trigger on /lsr-maintainer commands or when the user asks about scheduled LSR/OBS maintenance, PR feedback automation, new role ports, or workspace setup.
+description: Scheduled autonomous maintenance of Linux System Roles forks and the OBS ansible-linux-system-roles package. Drives upstream-drift detection, PR-feedback auto-fix loops (with a 5-perspective review board), OBS build-failure repairs, new-role enablement, and self-bootstrap into a fresh VM. Never opens upstream PRs or OBS submit requests — that boundary is enforced by hooks at .claude/hooks/. Trigger on /lsr-maintainer commands or when the user asks about scheduled LSR/OBS maintenance, PR feedback automation, new role ports, or workspace setup.
 user-invocable: true
 argument-hint: "<command> [args]    (commands: run, status, doctor, dry-run, enable-role, bootstrap, sync-manifest, ack, enqueue)"
 allowed-tools: Read, Glob, Grep, Bash, Edit, Write, Agent, Skill
@@ -29,6 +29,10 @@ The autonomous nightly path. The full workflow lives in `references/workflow-run
    - `pr-status-poller` — diff `gh pr view` against per-PR cursors in state.
    - `upstream-drift-watcher` — `git ls-remote` vs `state.roles[*].last_seen_upstream_sha`.
    - `manifest-syncer` — parse `ansible-linux-system-roles.spec` for the canonical managed-role list.
+
+   Then sequentially:
+   - `fork-sync-checker` (after manifest-syncer + `seed_roles_from_manifest`) — ensure forks exist and main branches fast-forward to upstream.
+   - Enablement queue pop (after manifest-syncer) — read `config.enablement.queue[]`, enqueue `enable_role` events for the first `auto_enqueue_per_run` roles that aren't already in the OBS manifest.
 3. **Execute queue items** within time budget (default 90 min). Priority order:
    - P0: `reviewer_change_requested` on open PR
    - P1: `ci_failed` on open PR
@@ -86,7 +90,7 @@ This is a checklist you consult at every branch point. **Do not deviate.**
 - No specialist persona helps.
 
 **Parallel-fanout rules:**
-- **Reads fan out**: review board (4 reviewers in parallel), queue refresh (3 pollers in parallel).
+- **Reads fan out**: review board (5 reviewers in parallel), queue refresh (3 pollers in parallel).
 - **Writes serialize**: one `bug-fix-implementer` per role at a time; one `obs-package-maintainer` per package at a time. Enforced naturally by the orchestrator's sequential queue-pop loop within a single run, AND by a `state/.run.lock` flock (see `references/workflow-run.md` §"Phase 0") that prevents concurrent `/lsr-maintainer run` invocations (cron-vs-manual collision) from clobbering state.
 - **Cross-role work fans out**: 3 different roles each with independent items run their pipelines in parallel.
 
@@ -104,7 +108,7 @@ When a sub-agent exceeds budget, abort it, mark item "needs human" in PENDING_RE
 
 ## The review board
 
-Every patch from `bug-fix-implementer` goes through 4 reviewers **in parallel** before the tox regression matrix runs. This is non-negotiable.
+Every patch from `bug-fix-implementer` goes through 5 reviewers **in parallel** before the tox regression matrix runs. This is non-negotiable.
 
 | Reviewer | Question |
 |---|---|
@@ -112,6 +116,7 @@ Every patch from `bug-fix-implementer` goes through 4 reviewers **in parallel** 
 | `reviewer-cross-os-impact` | Does it break SLE 15 SP7 / Leap 15.6 / RHEL? |
 | `reviewer-upstream-style` | Does it follow LSR conventions (set_vars pattern, vars/ layout, meta platforms)? |
 | `reviewer-security` | Shell injection, world-writable files, broad firewall opens, credential templates? |
+| `reviewer-sle-docs` | Does the SLE-affecting code follow SLE 16 documented practice? (Consults `documentation.suse.com`; skips for non-SLE patches.) |
 
 Each returns `{verdict: pass|concerns|reject, findings: [...]}` as JSON.
 

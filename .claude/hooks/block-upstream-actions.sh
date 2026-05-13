@@ -32,6 +32,9 @@ if [ -f "$CONFIG_JSON" ] && command -v jq >/dev/null 2>&1; then
   ALLOW_OSC_PREFIX="$(jq -r '.obs.personal_project_root // ""' "$CONFIG_JSON" 2>/dev/null)"
 fi
 
+# State file (for fork-whitelist managed-role lookups).
+STATE_JSON="${LSR_STATE_OVERRIDE:-${WORKSPACE_ROOT}/state/.lsr-maintainer-state.json}"
+
 SECURITY_LOG="${WORKSPACE_ROOT}/var/log/security.log"
 mkdir -p "$(dirname "$SECURITY_LOG")" 2>/dev/null || true
 
@@ -282,6 +285,41 @@ while IFS= read -r sub; do
         *" pr edit"*"--base"*)
           emit_block "Re-basing a PR via gh pr edit is forbidden — that's an upstream-touching operation." "$sub" ;;
       esac
+      # ---- gh repo fork narrow whitelist (regex match — handles multi-whitespace + tabs) ----
+      # Case-statement globs (`*" repo fork "*`) require a literal single space,
+      # so `gh  repo  fork ...` slips through. Use a regex test to catch all
+      # whitespace variants.
+      if [[ "$args" =~ [[:space:]]+repo[[:space:]]+fork([[:space:]]+|$) ]]; then
+        if [[ -z "$ALLOW_GH_OWNER" ]]; then
+          emit_block "gh repo fork is forbidden — workspace not initialized (run ./bin/setup.sh)." "$sub"
+        fi
+        # Reject --org (redirects fork ownership). Covers both `--org X` and `--org=X` forms.
+        # `--clone[=BOOL]` and `--remote-name X` are documented benign flags — do not reject.
+        if [[ "$args" =~ --org([[:space:]]+|=) ]]; then
+          emit_block "gh repo fork: --org redirects fork ownership; denied." "$sub"
+        fi
+        # Extract linux-system-roles/<role>; allow multiple whitespace and tabs.
+        if [[ "$args" =~ [[:space:]]+repo[[:space:]]+fork[[:space:]]+(linux-system-roles)/([A-Za-z0-9._-]+) ]]; then
+          role="${BASH_REMATCH[2]}"
+          role_lc="${role,,}"
+          managed=""
+          if [ -f "$STATE_JSON" ]; then
+            managed="$(jq -r '[(.obs.managed_roles[]?.name // empty), (.roles|keys[]? // empty)] | .[] | ascii_downcase' "$STATE_JSON" 2>/dev/null | sort -u)"
+          fi
+          tracked=""
+          if [ -f "$CONFIG_JSON" ]; then
+            tracked="$(jq -r '.github.tracked_extra_roles[]? // empty | ascii_downcase' "$CONFIG_JSON" 2>/dev/null | sort -u)"
+          fi
+          allowed="$(printf '%s\n%s\n' "$managed" "$tracked" | sort -u)"
+          if printf '%s\n' "$allowed" | grep -qFx -- "$role_lc"; then
+            :  # allowed — proceed
+          else
+            emit_block "gh repo fork ${role}: not in state.obs.managed_roles[] / config.github.tracked_extra_roles. Add to config.github.tracked_extra_roles to allow." "$sub"
+          fi
+        else
+          emit_block "gh repo fork restricted to linux-system-roles/<managed-role> (pattern not matched)." "$sub"
+        fi
+      fi
       # Explicit --repo flag → check owner.
       if [[ "$args" =~ --repo[[:space:]=]+([A-Za-z0-9._/-]+) ]]; then
         target="${BASH_REMATCH[1]}"

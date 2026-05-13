@@ -49,7 +49,7 @@ Required:
 
 - A GitHub account (`${github_user}` (from setup.sh detection)).
 - An SSH key registered with GitHub. Test: `ssh -T git@github.com`.
-- A fork on **each role you want the agent to maintain**. The agent's first run will list any missing forks in `state/PENDING_REVIEW.md` so you can create them on demand.
+- A fork on **each role you want the agent to maintain**. As of v3 of the config schema, the agent's `fork-sync-checker` will auto-create missing forks for roles in the OBS manifest (or `config.github.tracked_extra_roles`) — the hook narrowly whitelists `gh repo fork linux-system-roles/<role>`. See [docs/feature-fork-sync.md](docs/feature-fork-sync.md).
 
 Authenticate the `gh` CLI:
 
@@ -167,3 +167,66 @@ lsr-maintainer-workspace/var/
 ```
 
 Every one of these paths is a key in `state/config.json::paths`. Override any value (e.g., to point `iso_dir` at `/mnt/big/iso`) and the agent picks it up at next run — see [docs/component-config.md](docs/component-config.md).
+
+## 8. Day-2 configuration (optional)
+
+After `make install` succeeds, `state/config.json` is v3 with all defaults filled in. None of the sections below need to be touched for the agent to work — they're optional knobs.
+
+### Schedule SLE-enablement work
+
+Add roles you want enabled for SLE 16 to `config.enablement.queue` (FIFO list). The nightly run pops one per night and runs the full port through `new-role-enabler`:
+
+```bash
+python3 -c "
+import json
+cfg = json.load(open('state/config.json'))
+cfg.setdefault('enablement', {}).setdefault('queue', [])
+cfg['enablement']['queue'].extend(['logging', 'kdump'])
+open('state/config.json', 'w').write(json.dumps(cfg, indent=2, sort_keys=True))
+"
+```
+
+Or just edit the file directly. See [docs/feature-role-enablement.md](docs/feature-role-enablement.md).
+
+### Wire up out-of-band notifications
+
+Pick one backend (ntfy, email, or webhook). Easiest is ntfy — install the [ntfy app](https://ntfy.sh), pick a random topic:
+
+```jsonc
+"notify": {
+  "backend": "ntfy",
+  "events": ["reject", "anomaly", "halt", "host_lock_mismatch"],
+  "ntfy": {"url": "https://ntfy.sh/lsr-<your-random-suffix>", "priority": "default"}
+}
+```
+
+See [docs/feature-notifications.md](docs/feature-notifications.md) for email/webhook setup.
+
+### Lock the workspace to this machine (paranoid mode)
+
+After your first successful run captures `state.host.fingerprint`, flip on `config.security.enforce_host_lock`:
+
+```jsonc
+"security": {"enforce_host_lock": true}
+```
+
+Subsequent runs on a different machine abort. Recovery on a deliberate move: `make ack-host-lock` (TTY required). See [docs/feature-host-lock.md](docs/feature-host-lock.md).
+
+### Tune fork-sync behavior
+
+Auto-fork + nightly fork-sync is on by default. To disable auto-push of fast-forwarded fork mains:
+
+```jsonc
+"fork_sync": {"auto_push": false, "max_per_run": 5}
+```
+
+See [docs/feature-fork-sync.md](docs/feature-fork-sync.md).
+
+## 9. Migration from a v1/v2 workspace
+
+If you're upgrading an existing install (config schema v1 or v2), the agent's `load_config()` migrates non-destructively on first read:
+
+- **v1 → v2**: legacy `~/iso` / `~/github/...` paths get rewritten to `{workspace}/var/...` placeholders. User-customized paths are preserved verbatim.
+- **v2 → v3**: new sections (`enablement`, `fork_sync`, `security`) are added with defaults via `_merge_defaults`. No existing field is rewritten.
+
+Both transitions are idempotent — running `python3 -m orchestrator.config` (or any agent command) once after pulling the new code is enough.

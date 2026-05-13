@@ -8,6 +8,7 @@ The orchestrator (`.claude/skills/lsr-maintainer/SKILL.md`) spawns these via the
 |---|---|---|---|---|
 | `pr-status-poller` | read-only | open-PR list, cursors | events + cursor updates | 60s |
 | `upstream-drift-watcher` | read-only | role list, last-seen-SHA | drift events | 90s |
+| `fork-sync-checker` | write (fork creation, fast-forward push) | role list | sync events + `state.roles[*].fork_*` | 2min/role, 10min total |
 | `manifest-syncer` | read-only | spec file path | managed_roles[] (OBS-shipped), manifest events | 15s |
 | `tox-test-runner` | write (local logs) | role + target | PASS/FAIL/N/A + log path | 30min/test |
 | `multi-os-regression-guard` | orchestrator | role + worktree + baseline | per-target verdict | 30–60min |
@@ -16,6 +17,7 @@ The orchestrator (`.claude/skills/lsr-maintainer/SKILL.md`) spawns these via the
 | `reviewer-cross-os-impact` | read-only | worktree + commit + role | verdict + findings | 5min |
 | `reviewer-upstream-style` | read-only | worktree + commit + role | verdict + findings | 5min |
 | `reviewer-security` | read-only | worktree + commit + role | verdict + findings | 5min |
+| `reviewer-sle-docs` | read-only (WebFetch) | worktree + commit + role + changed_files | verdict + findings (SLE 16 docs alignment) | 90s |
 | `obs-package-maintainer` | write (osc commits) | package + project | succeeded/failed/needs-human | 30min |
 | `new-role-enabler` | write (worktree, push to fork, stage spec) | role + target_set | enabled/not_viable/etc. | 60min |
 | `bootstrap-runner` | write (state, dirs, venv) | none | components_ready + pending_actions | 60s |
@@ -58,7 +60,7 @@ Defaults for `tracked_extra_roles`: `sudo, kernel_settings, ansible-sshd, networ
 
 ## Verdict-merge for the review board
 
-Each of the 4 reviewers returns `{verdict: pass|concerns|reject, findings: [...]}`:
+Each of the 5 reviewers returns `{verdict: pass|concerns|reject, findings: [...]}`:
 
 - All `pass` → run regression matrix.
 - Any `reject` → revert worktree, surface findings to PENDING_REVIEW.md.

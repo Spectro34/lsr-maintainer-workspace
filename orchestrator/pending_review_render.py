@@ -6,6 +6,8 @@ Sections (in order):
   🏗 OBS package status
   🆕 New role ready to ship
   🌊 Upstream drift detected (no action yet)
+  🔱 Fork sync status (managed-role forks vs upstream main)
+  📋 Enablement queue (roles you've asked the agent to enable for SLE)
   🩺 Bootstrap status (this host)
   ❗ Manual triage needed
 """
@@ -15,7 +17,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-def render(state: dict[str, Any]) -> str:
+def render(state: dict[str, Any], cfg: dict[str, Any] | None = None) -> str:
     now = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M %z")
     lines: list[str] = []
     lines.append(f"# Pending Review — generated {now}")
@@ -85,6 +87,40 @@ def render(state: dict[str, Any]) -> str:
             lines.append(f"- **{q.get('role','?')}** — new commits touching: {', '.join(q.get('conflicting_files', []))}")
     lines.append("")
 
+    lines.append("## 🔱 Fork sync status")
+    roles = state.get("roles", {}) or {}
+    fork_attention = [
+        (name, r) for name, r in sorted(roles.items())
+        if r.get("fork_sync_status") in ("conflict", "diverged", "missing", "unknown")
+    ]
+    fork_in_sync = sum(1 for r in roles.values() if r.get("fork_sync_status") == "in_sync")
+    fork_behind = sum(1 for r in roles.values() if r.get("fork_sync_status") == "behind")
+    fork_ahead = sum(1 for r in roles.values() if r.get("fork_sync_status") == "ahead")
+    if not fork_attention and (fork_in_sync or fork_behind or fork_ahead):
+        lines.append(f"- _(all forks healthy — {fork_in_sync} in_sync, {fork_behind} behind (auto-syncing), {fork_ahead} ahead of upstream)_")
+    elif not roles:
+        lines.append("- _(no roles tracked yet)_")
+    elif not fork_attention:
+        lines.append("- _(no attention needed)_")
+    else:
+        for name, r in fork_attention:
+            status = r.get("fork_sync_status", "unknown")
+            cmp_ = r.get("fork_sync_compare") or {}
+            detail = f"behind {cmp_.get('behind_by','?')} ahead {cmp_.get('ahead_by','?')}" if cmp_ else ""
+            lines.append(f"- **{name}** — {status}{(' (' + detail + ')') if detail else ''}")
+    lines.append("")
+
+    lines.append("## 📋 Enablement queue")
+    queue_list = ((cfg or {}).get("enablement") or {}).get("queue") or []
+    if not queue_list:
+        lines.append("- _(empty — add roles to `config.enablement.queue` to schedule them for SLE enablement)_")
+    else:
+        for role in queue_list:
+            lines.append(f"- [ ] **{role}** — pending enablement (pops 1/run by default)")
+        lines.append("")
+        lines.append("Manual ack: `make ack-enablement ROLE=<name>` (or edit `state/config.json`).")
+    lines.append("")
+
     lines.append("## 🩺 Bootstrap status (this host)")
     host = state.get("host", {})
     cr = host.get("components_ready", {}) or {}
@@ -109,7 +145,31 @@ def render(state: dict[str, Any]) -> str:
 
 
 if __name__ == "__main__":
-    import json, sys
+    import json, sys, os
+    if len(sys.argv) == 1:
+        # Self-test (so `make test-orchestrator` can exercise the new sections).
+        cfg = {"enablement": {"queue": ["logging", "kdump"]}}
+        state = {
+            "queue": [],
+            "roles": {
+                "sudo":    {"fork_sync_status": "in_sync",  "fork_sync_compare": {"behind_by": 0, "ahead_by": 0}},
+                "logging": {"fork_sync_status": "conflict", "fork_sync_compare": {"behind_by": 3, "ahead_by": 2}},
+                "firewall":{"fork_sync_status": "behind",   "fork_sync_compare": {"behind_by": 5, "ahead_by": 0}},
+            },
+            "obs": {},
+            "host": {"components_ready": {}},
+        }
+        text = render(state, cfg)
+        assert "🔱 Fork sync status" in text
+        assert "logging" in text and "conflict" in text
+        assert "📋 Enablement queue" in text
+        assert "**logging**" in text and "**kdump**" in text
+        # No-config path still works (legacy callers).
+        text2 = render(state)
+        assert "📋 Enablement queue" in text2
+        assert "empty" in text2  # cfg defaulted → empty queue note
+        print("OK pending_review_render self-test")
+        sys.exit(0)
     if len(sys.argv) != 2:
         print("usage: pending_review_render.py <state.json>", file=sys.stderr)
         sys.exit(2)

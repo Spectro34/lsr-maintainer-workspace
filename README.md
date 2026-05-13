@@ -79,8 +79,13 @@ To stop the agent: `make uninstall` removes the cron entry and leaves everything
 |---|---|
 | PR-review auto-fix loop | [docs/feature-pr-feedback.md](docs/feature-pr-feedback.md) |
 | New-role enablement | [docs/feature-new-role-enablement.md](docs/feature-new-role-enablement.md) |
+| SLE role enablement queue | [docs/feature-role-enablement.md](docs/feature-role-enablement.md) |
+| Auto-fork + nightly fork sync | [docs/feature-fork-sync.md](docs/feature-fork-sync.md) |
 | OBS package maintenance | [docs/feature-obs-maintenance.md](docs/feature-obs-maintenance.md) |
 | Self-bootstrap into fresh VM | [docs/feature-bootstrap.md](docs/feature-bootstrap.md) |
+| Cost tracking per run | [docs/feature-cost-tracking.md](docs/feature-cost-tracking.md) |
+| Out-of-band notifications | [docs/feature-notifications.md](docs/feature-notifications.md) |
+| Same-machine host lock | [docs/feature-host-lock.md](docs/feature-host-lock.md) |
 
 ## Components
 

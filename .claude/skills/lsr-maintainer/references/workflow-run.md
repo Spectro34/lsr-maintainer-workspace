@@ -8,7 +8,33 @@ This is the full nightly autonomous workflow. The orchestrator (SKILL.md) loads 
 - `.claude/settings.json` loaded → security hooks active
 - `state/` exists (created by `make install-deps`)
 
-## Phase 0 — Acquire run lock (pidfile + state_lock)
+## Phase 0 — Host-lock check (opt-in) + run lock (pidfile + state_lock)
+
+### Phase 0a — Host-lock check (before any pidfile / state mutation)
+
+If `config.security.enforce_host_lock` is true, compare the current host
+fingerprint against `state.host.fingerprint`. On mismatch the run exits
+1 + `notify(host_lock_mismatch)` BEFORE the pidfile is written — a
+wrong-host run shouldn't leave a pidfile to confuse the next legitimate
+run.
+
+```python
+from orchestrator.host_lock import check_lock
+from orchestrator.notify import notify
+
+ok, reason = check_lock(state, cfg)  # state may be the on-disk file, not yet locked
+if not ok:
+    notify(cfg, "host_lock_mismatch", reason, priority="high")
+    print(reason)
+    sys.exit(1)
+```
+
+The default is `enforce_host_lock: false`, so this is a no-op for
+existing installs. Operators set it after first run (when fingerprint
+is captured) for paranoid same-machine pinning. Recovery on a
+deliberate move: `make ack-host-lock` from a TTY.
+
+### Phase 0b — Run lock
 
 Two layers of mutual exclusion (issue #20):
 
@@ -101,7 +127,7 @@ Read-only checks. Abort early if anything critical is broken:
 
 For any 🔴: write a PENDING_REVIEW.md entry with the fix command, then skip the affected phases. (Auth broken → skip PR work; tox missing → skip tests.) Don't abort the whole run.
 
-## Phase 2 — Queue refresh (3 sub-agents in PARALLEL)
+## Phase 2 — Queue refresh (3 sub-agents in PARALLEL, then fork-sync + enablement pop)
 
 Single `Agent()` batch with 3 calls:
 
@@ -122,7 +148,34 @@ seed_roles_from_manifest(state, managed_roles)
 
 This ensures every role in the OBS manifest has a per-role entry in `state.roles` with default fields populated (issue #6).
 
-For each event, call `enqueue(state, item)` with a stable `id` derived from event kind + target (so duplicate events across runs don't re-queue).
+**Sequentially (NOT in the parallel batch above)**, run fork-sync-checker. It needs the just-refreshed `state.obs.managed_roles[]` and writes back to state.roles[*].fork_*:
+
+```
+Agent(prompt=read("agents/fork-sync-checker.md"))
+```
+
+Then pop from `config.enablement.queue`:
+
+```python
+from orchestrator.config import pop_enablement_role
+managed_names = {r["name"] for r in state["obs"]["managed_roles"]}
+queued_names = {q["role"] for q in state["queue"] if q.get("kind") == "enable_role"}
+for _ in range(cfg["enablement"].get("auto_enqueue_per_run", 1)):
+    role = pop_enablement_role(cfg, managed_names, queued_names)
+    if not role:
+        break
+    enqueue(state, {
+        "id": f"enable-role:{role}",
+        "kind": "enable_role",
+        "role": role,
+        "target": cfg["enablement"].get("default_target", "sle16"),
+    })
+    queued_names.add(role)
+```
+
+Note: `pop_enablement_role` PEEKS — it does not remove. The role stays in `config.enablement.queue[]` until `new-role-enabler` returns `verdict: "enabled"`, at which point Phase 3 calls `ack_enablement_role(cfg_path, role)`. Failures (`fork_needed`/`not_viable`/`review_rejected`) leave the role in the queue so the next nightly run retries; surface to PENDING under "📋 Enablement queue".
+
+For each event from sub-agents, call `enqueue(state, item)` with a stable `id` derived from event kind + target (so duplicate events across runs don't re-queue).
 
 ## Phase 3 — Execute queue items within time budget
 
@@ -164,11 +217,15 @@ Spawn bug-fix-implementer with:
    ↓
 Returns commit_sha + diagnosis (or commit_sha=null=needs human triage)
    ↓
-If commit_sha: spawn REVIEW BOARD in parallel (4 agents):
+Compute changed_files for reviewer-sle-docs skip-gate:
+   changed_files = git -C <worktree_path> show --name-only --pretty=format: <commit_sha>
+   ↓
+If commit_sha: spawn REVIEW BOARD in parallel (5 agents):
    Agent(reviewer-correctness)
    Agent(reviewer-cross-os-impact)
    Agent(reviewer-upstream-style)
    Agent(reviewer-security)
+   Agent(reviewer-sle-docs)   # pass payload.changed_files for skip-gate
    ↓
 Merge verdicts:
    any reject → revert worktree, PENDING with findings, exit item
@@ -213,6 +270,16 @@ If green → git push origin <fork-branch>
 ### 3d — New-role enablement
 
 Delegates to `agents/new-role-enabler.md` workflow. See `workflow-enable-role.md` for the playbook.
+
+On successful enablement (`verdict: "enabled"`), the orchestrator removes the role from `config.enablement.queue[]`:
+
+```python
+from orchestrator.config import ack_enablement_role
+if verdict == "enabled":
+    ack_enablement_role("state/config.json", role)
+```
+
+Failures leave the role in the queue so the next nightly run retries. Manual override: `make ack-enablement ROLE=<name>` (or edit `state/config.json` directly).
 
 ### 3e — Round-robin health check
 
@@ -275,7 +342,7 @@ The orchestrator calls `notify(config, event, message, priority)` for each notab
 ```python
 from orchestrator.pending_review_render import render
 state["pending_review_count"] = sum(1 for q in state["queue"] if q["priority"] < 9)
-text = render(state)
+text = render(state, cfg)   # cfg required for the 📋 Enablement queue section
 if anomaly_block:
     text = anomaly_block + "\n" + text   # anomaly always TOP of file
 with open("state/PENDING_REVIEW.md", "w") as f:

@@ -88,6 +88,15 @@ enable-role: ## Enqueue a new-role enablement. Usage: make enable-role ROLE=squi
 	@if [ -z "$(ROLE)" ]; then echo "Usage: make enable-role ROLE=<name> [FOR=sle16|all]"; exit 1; fi
 	@claude -p "/lsr-maintainer enable-role $(ROLE) --for $(or $(FOR),sle16)"
 
+.PHONY: ack-enablement
+ack-enablement: ## Remove a role from config.enablement.queue. Usage: make ack-enablement ROLE=logging
+	@if [ -z "$(ROLE)" ]; then echo "Usage: make ack-enablement ROLE=<name>"; exit 1; fi
+	@python3 -c "from orchestrator.config import ack_enablement_role; r=ack_enablement_role('state/config.json', '$(ROLE)'); print('OK removed' if r else 'NOOP not in queue')"
+
+.PHONY: ack-host-lock
+ack-host-lock: ## Re-confirm host fingerprint after a workspace move (TTY-only). Pairs with config.security.enforce_host_lock.
+	@python3 -m orchestrator.host_lock --ack state/.lsr-maintainer-state.json
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -113,6 +122,12 @@ test-orchestrator: ## Run orchestrator Python self-tests (config + state + manif
 	@python3 -m orchestrator.sanitize
 	@echo "== orchestrator/cost_meter self-test =="
 	@python3 -m orchestrator.cost_meter
+	@echo "== orchestrator/host_lock self-test =="
+	@python3 -m orchestrator.host_lock
+	@echo "== orchestrator/role_domains self-test =="
+	@python3 -m orchestrator.role_domains
+	@echo "== orchestrator/pending_review_render self-test =="
+	@python3 -m orchestrator.pending_review_render
 	@echo "== orchestrator/manifest_parse smoke (requires real spec) =="
 	@ansible_root=$$(python3 -c "import sys; sys.path.insert(0,'.'); from orchestrator.config import load_config, get_path; print(get_path(load_config('state/config.json'), 'ansible_root'))"); \
 	spec=$$(find "$$ansible_root" -name 'ansible-linux-system-roles.spec' 2>/dev/null | head -1); \
