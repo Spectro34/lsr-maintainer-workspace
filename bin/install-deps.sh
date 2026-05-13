@@ -56,12 +56,27 @@ else
   exit 1
 fi
 
-# --- 4. tox-lsr venv (best-effort) ---
+# --- 4. tox-lsr venv (created here, deterministically) ---
+# Don't defer to bootstrap-runner — without the venv, the regression matrix
+# can't run, which means the agent will skip pushing fixes. Better to fail
+# loudly here than silently degrade the agent to "advisory only" mode.
 TOX_VENV="$(lsr_path tox_venv)"
 if [[ -d "$TOX_VENV/bin" ]]; then
   ok "tox-lsr venv exists at $TOX_VENV"
 else
-  warn "tox-lsr venv missing — bootstrap-runner agent will set it up on next run."
+  warn "tox-lsr venv missing — creating now..."
+  PIN_FILE="$WORKSPACE/.claude/skills/lsr-maintainer/references/tox-lsr-pin.txt"
+  PIN_SPEC="$(grep -Ev '^[[:space:]]*(#|$)' "$PIN_FILE" 2>/dev/null | head -1)"
+  [[ -z "$PIN_SPEC" ]] && PIN_SPEC="tox-lsr"
+  mkdir -p "$(dirname "$TOX_VENV")"
+  if python3 -m venv "$TOX_VENV" 2>/dev/null \
+     && "$TOX_VENV/bin/pip" install --quiet --upgrade pip \
+     && "$TOX_VENV/bin/pip" install --quiet "$PIN_SPEC"; then
+    ok "tox-lsr venv created at $TOX_VENV (installed: $PIN_SPEC)"
+  else
+    warn "tox-lsr venv creation failed — bootstrap-runner will retry on next 'make run'."
+    warn "Manual: python3 -m venv $TOX_VENV && $TOX_VENV/bin/pip install $PIN_SPEC"
+  fi
 fi
 
 # --- 4b. Leap 16 image (auto-download from download.opensuse.org if missing) ---

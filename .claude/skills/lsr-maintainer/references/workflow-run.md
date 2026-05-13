@@ -114,9 +114,9 @@ except TimeoutError:
 
 Holding the lock through long phases (60-min new-role enablement, 30-min tox) is the desired behavior: a manual `make run` while cron is running will TimeoutError after 30s. Only one run at a time.
 
-## Phase 1 — Pre-flight (doctor)
+## Phase 1 — Pre-flight (doctor + self-healing bootstrap)
 
-Read-only checks. Abort early if anything critical is broken:
+Read-only checks PLUS conditional self-healing via `bootstrap-runner`:
 
 1. `state/.lsr-maintainer-state.json` loads (else default_state()).
 2. `gh auth status` succeeds.
@@ -125,7 +125,24 @@ Read-only checks. Abort early if anything critical is broken:
 5. `git config --global user.email` and `user.name` are set.
 6. `.claude/skills/lsr-agent/SKILL.md` is present (inlined skill).
 
-For any 🔴: write a PENDING_REVIEW.md entry with the fix command, then skip the affected phases. (Auth broken → skip PR work; tox missing → skip tests.) Don't abort the whole run.
+For any 🔴 that bootstrap-runner can fix (missing tox venv, missing QEMU image, missing dirs), invoke it:
+
+```python
+needs_bootstrap = (
+    not os.path.exists(f"{get_path(cfg, 'tox_venv')}/bin/activate")
+    or not has_image_for("Leap-16.0-Minimal-VM*.x86_64*Cloud*.qcow2")
+)
+if needs_bootstrap:
+    # bootstrap-runner is idempotent and fixes what it can.
+    # See agents/bootstrap-runner.md for the full step list.
+    Agent(prompt=read("agents/bootstrap-runner.md"))
+```
+
+After bootstrap-runner returns, re-check the same posture items.
+
+For any 🔴 that's still red (auth broken, git author unset, lsr-agent SKILL missing, hooks failing): write a PENDING_REVIEW.md entry with the fix command, then skip the affected phases (auth broken → skip PR work; tox-still-missing → skip tox phases). Don't abort the whole run.
+
+This makes `/lsr-maintainer run` self-healing: a fresh workspace, or one where the venv was wiped by `make distclean`, recovers automatically on the next run. The same is true for the Leap 16 image being deleted, or for a corrupted `state/.bootstrap-state.json`.
 
 ## Phase 2 — Queue refresh (3 sub-agents in PARALLEL, then fork-sync + enablement pop)
 
