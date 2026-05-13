@@ -121,20 +121,9 @@ def default_config() -> dict[str, Any]:
         },
         # Out-of-band notifications (issue #18). Disabled by default — set
         # `backend` to enable. Falls back silently if backend unavailable.
-        # The default `events` list gives a balanced live trickle:
-        # - critical events always fire (reject/anomaly/halt/doctor_red/host_lock_mismatch)
-        # - milestone events fire per action (commit_pushed/fork_created/enable_role_complete/human_action_needed)
-        # - heartbeat events fire 1x/run (run_started/run_completed)
-        # - summaries fire 1x/run (daily_summary, fork_sync_summary)
-        # Trim this list to reduce noise; remove a kind to silence it.
         "notify": {
-            "backend": "",
-            "events": [
-                "reject", "anomaly", "doctor_red", "halt", "host_lock_mismatch",
-                "commit_pushed", "fork_created", "enable_role_complete", "human_action_needed",
-                "run_started", "run_completed",
-                "daily_summary", "fork_sync_summary",
-            ],
+            "backend": "",           # "ntfy" | "email" | "webhook" | ""
+            "events": ["reject", "anomaly", "doctor_red", "halt", "daily_summary", "host_lock_mismatch"],
             "ntfy":    {"url": "", "priority": "default"},
             "email":   {"to": ""},
             "webhook": {"url": ""},
