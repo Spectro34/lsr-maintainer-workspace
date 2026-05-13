@@ -41,7 +41,7 @@ poller        drift-watcher   syncer          implementer    maintainer
                        │              git push origin fix/...
                        │                       │
                        ▼                       ▼
-              state/PENDING_REVIEW.md    LSR_PROGRESS.md
+              state/PENDING_REVIEW.md    state/LSR_PROGRESS.md
                        │                       │
                        └───────────┬───────────┘
                                    ▼
@@ -51,7 +51,7 @@ poller        drift-watcher   syncer          implementer    maintainer
 
 ## Why submodules
 
-Each managed project (`lsr-agent`, `obs-package-skill`, `osc-mcp`) is its own repo with its own commit history, remotes, and CI. The workspace pins each to a known-good ref via `.gitmodules`. Editing a sub-project still happens inside that submodule (push to its own remote); the workspace just records the new pin via `make sync-projects`.
+Each managed submodule (`obs-package-skill`, `osc-mcp`) is its own repo with its own commit history, remotes, and CI. The workspace pins each to a known-good ref via `.gitmodules`. Editing a sub-project still happens inside that submodule (push to its own remote); the workspace just records the new pin via `make sync-projects`. The `lsr-agent` skill is NOT a submodule — it's inlined at `.claude/skills/lsr-agent/` as part of this workspace's own git history, since it doesn't have an independent release cycle.
 
 This avoids two anti-patterns:
 

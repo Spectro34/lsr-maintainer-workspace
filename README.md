@@ -9,7 +9,7 @@ This workspace pulls together everything needed to run the agent end-to-end on a
 **Dependent projects:**
 - `projects/obs-package-skill/` — git submodule (autonomous OBS package maintenance skill)
 - `projects/osc-mcp/` — git submodule (osc MCP server)
-- `projects/lsr-agent/` — **symlink** to `../../rnd/lsr-agent/` (deep LSR knowledge skill). This subdir currently lives inside the `skill-lifecycle-framework` repo, so a fresh clone of this workspace requires that repo to be cloned as a sibling at `~/github/rnd/`. Carve-out to its own submodule is a tracked TODO in [projects/README.md](projects/README.md). `./bin/install-deps.sh` fails immediately if the symlink dangles.
+- `lsr-agent` — **inlined** at `.claude/skills/lsr-agent/`. Was previously a symlink to a `skill-lifecycle-framework` subdirectory; decoupled to make the workspace standalone. See [docs/feature-fork-sync.md](docs/feature-fork-sync.md) for the LSR knowledge surface and [docs/component-projects.md](docs/component-projects.md) for the migration history.
 
 ## What it does
 
@@ -32,12 +32,7 @@ See [SECURITY.md](SECURITY.md) for the full threat model and hook semantics.
 ## Quickstart (new machine)
 
 ```bash
-# 0. lsr-agent dependency (until it's carved out into its own repo).
-mkdir -p ~/github/rnd && cd ~/github/rnd
-git clone <skill-lifecycle-framework-fork-url>  # provides ~/github/rnd/lsr-agent/
-
-# 1. The workspace itself
-cd ~/github && git clone --recurse-submodules <workspace-url> lsr-maintainer-workspace
+git clone --recurse-submodules <workspace-url> lsr-maintainer-workspace
 cd lsr-maintainer-workspace
 ./bin/setup.sh                      # interactive — you authenticate gh and osc yourself
 make install                         # idempotent host prep + cron install
@@ -45,7 +40,7 @@ bash bin/doctor.sh                   # fast green/red posture check (no claude -
 make dry-run                         # see what tonight would do, change nothing
 ```
 
-All runtime data — QEMU images, role clones, tox venv, OBS checkout, worktrees, audit logs — lives in `./var/` inside this workspace. `rm -rf var/` is a full reset; `make distclean` wipes it for you. The only external dependency is the `projects/lsr-agent` symlink (see step 0); everything else stays inside the workspace tree.
+All runtime data — QEMU images, role clones, tox venv, OBS checkout, worktrees, audit logs — lives in `./var/` inside this workspace. `rm -rf var/` is a full reset; `make distclean` wipes it for you. **No external dependencies** beyond standard system tools (`gh`, `osc`, `git`, `make`, `jq`, QEMU) — everything else stays inside the workspace tree.
 
 See [SETUP.md](SETUP.md) for prerequisites (system packages, GitHub account, OBS membership, QEMU images).
 

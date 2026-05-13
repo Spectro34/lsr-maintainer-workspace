@@ -123,7 +123,7 @@ Read-only checks. Abort early if anything critical is broken:
 3. `osc whois` succeeds.
 4. tox-lsr venv exists at `<paths.tox_venv>` (default `<workspace>/var/venv/tox-lsr/`).
 5. `git config --global user.email` and `user.name` are set.
-6. `projects/lsr-agent/` symlink resolves.
+6. `.claude/skills/lsr-agent/SKILL.md` is present (inlined skill).
 
 For any 🔴: write a PENDING_REVIEW.md entry with the fix command, then skip the affected phases. (Auth broken → skip PR work; tox missing → skip tests.) Don't abort the whole run.
 
@@ -349,7 +349,7 @@ with open("state/PENDING_REVIEW.md", "w") as f:
     f.write(text)
 ```
 
-Append a session block to `projects/lsr-agent/LSR_PROGRESS.md`:
+Append a session block to `state/LSR_PROGRESS.md`:
 
 ```markdown
 ## Session 2026-05-12 03:07 (nightly auto)

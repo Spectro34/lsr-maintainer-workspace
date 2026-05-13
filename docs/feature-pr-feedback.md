@@ -44,7 +44,7 @@ all baseline targets still PASS?  ─no─> revert; PENDING entry; do not push
 git push origin fix/suse-support
    │
    ▼
-state cursor updated; queue item removed; LSR_PROGRESS.md appended
+state cursor updated; queue item removed; state/LSR_PROGRESS.md appended
 ```
 
 ## Inputs the agent uses

@@ -19,13 +19,4 @@ git submodule foreach --quiet '
   printf "  %-30s  %-25s  %s%s\n" "$name" "$branch" "$sha" "$dirty"
 ' || true
 
-printf '\n== symlinked projects (not real submodules) ==\n'
-if [[ -L projects/lsr-agent ]]; then
-  if [[ -d projects/lsr-agent ]]; then
-    target="$(readlink projects/lsr-agent)"
-    sha="$(git -C "projects/lsr-agent" rev-parse --short HEAD 2>/dev/null || echo "(not a git repo)")"
-    printf '  %-30s  %s  %s\n' "projects/lsr-agent" "→ $target" "$sha"
-  else
-    printf '  projects/lsr-agent → DEAD SYMLINK\n'
-  fi
-fi
+# (lsr-agent is now inlined at .claude/skills/lsr-agent/ — no longer an external dep)

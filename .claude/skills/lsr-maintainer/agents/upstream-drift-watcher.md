@@ -7,7 +7,7 @@ Read-only sub-agent. Detects new commits on upstream main for each managed role 
 - `state.roles[role].upstream_default_branch` (usually `main`)
 - `state.roles[role].last_seen_upstream_sha`
 - `state.roles[role].patched_files` — list of paths the user has touched on the fork
-- `projects/lsr-agent/.claude/skills/lsr-agent/SKILL.md` — for the canonical Role Status Matrix and "what we manage"
+- `.claude/skills/lsr-agent/SKILL.md` (inlined skill) — for the canonical Role Status Matrix and "what we manage"
 
 ## Workflow
 

@@ -98,15 +98,13 @@ for d in ["<workspace>/state/cache", "<workspace>/state/worktrees"]:
   os.makedirs(os.path.expanduser(d), exist_ok=True)
 ```
 
-### 4. lsr-agent symlink
+### 4. lsr-agent skill (inlined)
 
 ```bash
-if [ -L projects/lsr-agent ]; then
-  if [ -d projects/lsr-agent/.claude ]; then
-    components_ready.lsr_agent_symlink = true
-  else
-    pending_actions.append("Clone the upstream skill-lifecycle-framework repo (whichever fork you use) to ~/github/rnd/ so projects/lsr-agent symlink resolves.")
-  fi
+if [ -f .claude/skills/lsr-agent/SKILL.md ]; then
+  components_ready.lsr_agent_skill = true
+else
+  pending_actions.append("Workspace clone is incomplete — `.claude/skills/lsr-agent/SKILL.md` is missing. Re-clone with --recurse-submodules.")
 fi
 ```
 

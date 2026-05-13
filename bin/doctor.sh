@@ -72,13 +72,11 @@ else
   emit_fail "git author"            "set with: git config --global user.email/name"
 fi
 
-# 6. projects/lsr-agent symlink
-if [[ -L projects/lsr-agent ]]; then
-  if [[ -d projects/lsr-agent/.claude/skills/lsr-agent ]]; then
-    emit_pass "lsr-agent symlink"   "$(readlink projects/lsr-agent)"
-  else
-    emit_fail "lsr-agent symlink"   "dangles — see SETUP.md §0"
-  fi
+# 6. lsr-agent skill (inlined at .claude/skills/lsr-agent/)
+if [[ -f .claude/skills/lsr-agent/SKILL.md ]]; then
+  emit_pass "lsr-agent skill"      "inlined at .claude/skills/lsr-agent/"
+else
+  emit_fail "lsr-agent skill"      ".claude/skills/lsr-agent/SKILL.md missing"
 fi
 
 # 7. QEMU images per target (uses config globs if available)

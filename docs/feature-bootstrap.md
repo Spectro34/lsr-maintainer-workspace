@@ -18,7 +18,7 @@ fresh VM, no agent installed yet
    │
    ├─ install-deps.sh
    │    ├─ creates required dirs
-   │    ├─ checks lsr-agent symlink target (or surfaces clone command)
+   │    ├─ verifies inlined `.claude/skills/lsr-agent/SKILL.md` is present
    │    └─ checks tox-lsr venv (or surfaces creation steps)
    │
    └─ install-cron.sh
@@ -31,7 +31,7 @@ fresh VM, no agent installed yet
 5. Doctor reports green/red:
    - system_packages       (red → user runs sudo zypper/apt/...)
    - directories           (auto-fixed by install-deps)
-   - lsr_agent_symlink     (red → user clones skill-lifecycle-framework)
+   - lsr_agent_skill       (red → workspace clone is incomplete; re-clone with --recurse-submodules)
    - tox_venv              (red → bootstrap-runner creates it on next run)
    - qemu_images           (red → user downloads images per SETUP.md)
    - gh_auth               (red → user re-runs setup.sh)

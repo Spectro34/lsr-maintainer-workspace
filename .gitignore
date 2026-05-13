@@ -8,6 +8,7 @@ state/.bootstrap-state.json
 state/.setup-complete.json
 state/.run.pid
 state/PENDING_REVIEW.md
+state/LSR_PROGRESS.md
 state/cache/
 state/worktrees/
 

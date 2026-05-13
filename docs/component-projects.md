@@ -23,25 +23,12 @@ Each project in `projects/` is its own repo with its own commits, remotes, and C
 - **Used by**: `obs-package-maintainer` via Skill() → obs-package-skill → MCP tools.
 - **When to bump pin**: when osc-mcp adds new tools or fixes bugs.
 
-### `projects/lsr-agent/` — symlink (TODO: promote to submodule)
+### `lsr-agent/` — inlined skill (not a submodule)
 
-- **Current state**: symlink to `~/github/rnd/lsr-agent/` (subdir of `<your fork of skill-lifecycle-framework>`).
-- **What it provides**: Deep `/lsr-agent` skill knowledge (Role Status Matrix, SUSE pkg mappings, set_vars pattern, tox infra, upstream PR status, known bugs) + 3 specialist sub-agents (check-suse-support, upstream-diff, test-role).
-- **Used by**: orchestrator (via `Skill(skill="lsr-agent", ...)`), bug-fix-implementer, new-role-enabler, all 4 reviewers.
-- **Carve-out plan**:
-  ```bash
-  # From ~/github/rnd:
-  git subtree split --prefix=lsr-agent -b lsr-agent-extract
-  gh repo create ${github_user}/lsr-agent --public --source=. --remote=lsr-agent-upstream
-  git push lsr-agent-upstream lsr-agent-extract:main
-
-  # Then in workspace:
-  cd ~/github/lsr-maintainer-workspace
-  rm projects/lsr-agent
-  git submodule add git@github.com:${github_user}/lsr-agent.git projects/lsr-agent
-  git commit -am "Promote lsr-agent symlink to submodule"
-  ```
-- **Until carved out**: anyone cloning the workspace to a new machine needs to also clone `<your fork of skill-lifecycle-framework>` at `~/github/rnd/`. `bootstrap-runner` surfaces this as a PENDING entry on hosts where the symlink target is missing.
+- **Current state**: lives in-tree at `.claude/skills/lsr-agent/`. Discovered by Claude Code automatically as a project-scoped skill (name `lsr-agent`). No external dependency, no submodule, no symlink.
+- **What it provides**: Deep `lsr-agent` skill knowledge (Role Status Matrix, SUSE pkg mappings, set_vars pattern, tox infra, upstream PR status, known bugs) + 3 specialist sub-agents (`check-suse-support`, `upstream-diff`, `test-role`) + a 164KB research knowledge base at `.claude/skills/lsr-agent/LSR_RESEARCH.md`.
+- **Used by**: orchestrator (via `Skill(skill="lsr-agent", ...)`), `bug-fix-implementer`, `new-role-enabler`, all 5 reviewers.
+- **History**: previously a symlink to `~/github/rnd/lsr-agent/` (a subdirectory of the user's `skill-lifecycle-framework` fork). Decoupled to make the workspace fully standalone — a single `git clone --recurse-submodules` is the entire onboarding. The append-only session log (`LSR_PROGRESS.md`) moved to `state/LSR_PROGRESS.md` (gitignored) to match the existing state-file pattern.
 
 ### `projects/ansible-host-scripts/` — not yet wired
 

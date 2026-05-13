@@ -39,7 +39,7 @@ The autonomous nightly path. The full workflow lives in `references/workflow-run
    - P2: OBS build failures
    - P3: `upstream_drift` touching patched files
    - P4: round-robin tox health-check rotation
-4. **Surface** to `state/PENDING_REVIEW.md` (rewritten from state) and append to `projects/lsr-agent/LSR_PROGRESS.md`.
+4. **Surface** to `state/PENDING_REVIEW.md` (rewritten from state) and append to `state/LSR_PROGRESS.md`.
 5. **Persist state** atomically (temp + rename).
 
 ### `/lsr-maintainer doctor`
@@ -131,7 +131,7 @@ Review fires **before** tox tests (cheap reviewers fail fast). Regression matrix
 
 ## Knowledge sources
 
-- **LSR domain knowledge** — load via `Skill(skill="lsr-agent", args="research <topic>")` against `projects/lsr-agent/.claude/skills/lsr-agent/SKILL.md`. Embedded Role Status Matrix, SUSE package name mappings, set_vars pattern, tox infra, upstream PR status, known bugs.
+- **LSR domain knowledge** — load via `Skill(skill="lsr-agent", args="research <topic>")` against `.claude/skills/lsr-agent/SKILL.md` (inlined in this workspace). Embedded Role Status Matrix, SUSE package name mappings, set_vars pattern, tox infra, upstream PR status, known bugs. The full 167KB knowledge base is at `.claude/skills/lsr-agent/LSR_RESEARCH.md`.
 - **OBS workflow** — load via `Skill(skill="obs-package-skill")` against `projects/obs-package-skill/`. Includes phase 0–4 autonomous workflow with the "never osc sr" guarantee.
 - **State schema** — `orchestrator/state_schema.py` (Pydantic models + atomic writers).
 - **Manifest parser** — `orchestrator/manifest_parse.py` (spec-file → managed_roles list).
@@ -168,7 +168,7 @@ When you spawn a sub-agent, read its `.md` first and include the full instructio
 
 - **State**: `state/.lsr-maintainer-state.json` — see `orchestrator/state_schema.py`. Atomic writes. Schema versioned.
 - **PENDING_REVIEW.md**: `state/PENDING_REVIEW.md` — rewritten from state every run. The one file the user reads each morning. Sections: 🚀 Ready to ship, 👀 Upstream review needs your eyes, 🏗 OBS package status, 🆕 New role ready to ship, 🌊 Upstream drift, 🩺 Bootstrap status.
-- **Session log**: append to `projects/lsr-agent/LSR_PROGRESS.md` (existing convention, append-only).
+- **Session log**: append to `state/LSR_PROGRESS.md` (gitignored, append-only).
 - **Audit trail**: every run's full transcript at `<paths.log_dir>/<timestamp>.jsonl` (default `<workspace>/var/log/`; handled by `bin/lsr-maintainer-run.sh`).
 
 ---
