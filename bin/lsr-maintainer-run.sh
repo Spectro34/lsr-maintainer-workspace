@@ -53,14 +53,37 @@ if ! bash bin/doctor.sh > "$DOCTOR_LOG" 2>&1; then
 fi
 
 # Run.
-"$CLAUDE_BIN" \
-  -p "/lsr-maintainer run" \
-  --permission-mode acceptEdits \
-  --output-format stream-json \
-  --max-turns 250 \
-  > "$TRANSCRIPT" 2>"$LOG_DIR/${ts}.stderr" || rc=$?
-
-rc="${rc:-0}"
+# Output strategy:
+#   - Full stream-json transcript → $TRANSCRIPT (for cost_meter, audit, forensics).
+#   - Stderr → $LOG_DIR/${ts}.stderr (claude warnings/errors).
+#   - Live human-readable narration → stdout (so `make run` shows you what's happening
+#     as it happens; cron captures it the same way).
+# We use `tee` to fan the raw JSONL into the file, then pipe through jq to extract
+# the assistant's text content. Falls back to cat if jq is absent.
+rc=0
+NARRATE='select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text // empty'
+if command -v jq >/dev/null 2>&1; then
+  set -o pipefail
+  "$CLAUDE_BIN" \
+    -p "/lsr-maintainer run" \
+    --permission-mode acceptEdits \
+    --output-format stream-json \
+    --verbose \
+    --max-turns 250 \
+    2>"$LOG_DIR/${ts}.stderr" \
+    | tee "$TRANSCRIPT" \
+    | jq -r --unbuffered "$NARRATE" 2>/dev/null || rc=$?
+else
+  # No jq → raw JSONL streams to terminal (still readable, just verbose).
+  "$CLAUDE_BIN" \
+    -p "/lsr-maintainer run" \
+    --permission-mode acceptEdits \
+    --output-format stream-json \
+    --verbose \
+    --max-turns 250 \
+    2>"$LOG_DIR/${ts}.stderr" \
+    | tee "$TRANSCRIPT" || rc=$?
+fi
 
 # Cost meter (issue #19): parse the transcript for token usage and append
 # to state/cost-history.jsonl. Fail-silent if the meter itself errors.

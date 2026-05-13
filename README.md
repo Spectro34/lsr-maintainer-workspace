@@ -31,42 +31,78 @@ See [SECURITY.md](SECURITY.md) for the full threat model and hook semantics.
 
 ## Quickstart (new machine)
 
+Manual-only by default. Cron is opt-in — you run the agent when you want.
+
+### One-time setup
+
 ```bash
-git clone --recurse-submodules <workspace-url> lsr-maintainer-workspace
+git clone --recurse-submodules git@github.com:Spectro34/lsr-maintainer-workspace.git
 cd lsr-maintainer-workspace
-./bin/setup.sh                      # interactive — you authenticate gh and osc yourself
-make install                         # idempotent host prep + cron install
-bash bin/doctor.sh                   # fast green/red posture check (no claude -p)
-make dry-run                         # see what tonight would do, change nothing
+./bin/setup.sh                      # interactive — you type gh + osc credentials directly
+make install                         # host prep (dirs, venv, submodules). NO cron.
+bash bin/doctor.sh                   # green/red posture check
 ```
+
+That's it. No cron entry was installed; the agent does nothing until you tell it to.
+
+### Run the agent (live, on demand)
+
+```bash
+make run
+```
+
+What happens:
+- Runs `bin/lsr-maintainer-run.sh` (the same script cron would use)
+- Permission mode: `--permission-mode acceptEdits` (hooks still active — see [SECURITY.md](SECURITY.md))
+- Live narration scrolls in your terminal as the agent works
+- Full transcript saved to `var/log/<timestamp>.jsonl` for audit + cost tracking
+- Writes `state/PENDING_REVIEW.md` when done
+
+To stop it: `Ctrl-C`. The orchestrator's pidfile + state-lock will recover cleanly on the next run.
+
+### Read the report
+
+```bash
+make pending     # opens state/PENDING_REVIEW.md in $PAGER
+```
+
+Sections you'll see: 🚀 Ready to ship, 👀 Upstream review needs your eyes, 🏗 OBS package status, 🆕 New role ready, 🔱 Fork sync, 📋 Enablement queue, 🩺 Bootstrap status, ❗ Manual triage needed.
+
+### Other one-liners
+
+```bash
+make doctor                       # fast bash posture check (<1s)
+make dry-run                       # queue-refresh pipeline only; writes nothing
+make enable-role ROLE=logging      # add a role to the SLE-enablement queue
+make ack-enablement ROLE=logging   # remove a role from the queue
+make status-all                    # workspace + submodule state
+make test                          # 218 hook tests + orchestrator self-tests
+```
+
+### Schedule it later (optional)
+
+If you decide you want nightly autonomous runs:
+
+```bash
+make install-cron      # installs a 03:07-local cron entry (idempotent)
+```
+
+To stop scheduled runs:
+```bash
+make uninstall-cron    # removes the cron entry; workspace + state untouched
+```
+
+To pause without removing the cron entry (e.g., on vacation):
+```bash
+touch state/.halt      # next cron tick exits cleanly without spawning the agent
+rm state/.halt         # resume
+```
+
+### Where things live
 
 All runtime data — QEMU images, role clones, tox venv, OBS checkout, worktrees, audit logs — lives in `./var/` inside this workspace. `rm -rf var/` is a full reset; `make distclean` wipes it for you. **No external dependencies** beyond standard system tools (`gh`, `osc`, `git`, `make`, `jq`, QEMU) — everything else stays inside the workspace tree.
 
-See [SETUP.md](SETUP.md) for prerequisites (system packages, GitHub account, OBS membership, QEMU images).
-
-## Daily usage
-
-Each morning, read:
-
-```bash
-make pending     # less state/PENDING_REVIEW.md
-```
-
-Anything ready to ship will be in the "Ready to ship" section with a one-line summary; you `gh pr create` it yourself. Anything that needs human triage is under "Manual triage needed."
-
-Other useful one-liners:
-
-```bash
-make doctor                  # fast bash posture check (<1s; suitable for cron pre-flight)
-make doctor-llm              # LLM-driven verbose check (slower, narrative)
-make dry-run                 # exercise the queue-refresh pipeline; write nothing
-make run                     # full nightly path on demand
-make enable-role ROLE=squid  # enqueue a new-role port
-make status-all              # workspace + submodule state
-make test                    # 169 hook tests + orchestrator self-tests
-```
-
-To stop the agent: `make uninstall` removes the cron entry and leaves everything else intact.
+See [SETUP.md](SETUP.md) for prerequisites (system packages, GitHub account, OBS membership, QEMU images) and Day-2 configuration (enablement queue, notifications, host-lock).
 
 ## Features
 

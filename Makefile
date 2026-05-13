@@ -16,19 +16,22 @@ setup: ## Run interactive auth setup (gh + osc) — never sees credentials
 	@bash bin/setup.sh
 
 .PHONY: install
-install: install-deps install-cron ## Bootstrap host + schedule nightly run
+install: install-deps ## One-time host prep (dirs, venv, submodules). Does NOT install cron — manual-only by default. To schedule nightly runs later: `make install-cron`.
 
 .PHONY: install-deps
 install-deps: ## Idempotent host prep — directories, tox venv, submodule checkout
 	@bash bin/install-deps.sh
 
 .PHONY: install-cron
-install-cron: ## Install nightly cron entry (idempotent)
+install-cron: ## OPT-IN: install nightly cron entry (03:07 local by default). Idempotent.
 	@bash bin/install-cron.sh
 
-.PHONY: uninstall
-uninstall: ## Remove cron entry — leaves workspace + state intact
+.PHONY: uninstall-cron
+uninstall-cron: ## Remove cron entry — leaves workspace + state intact
 	@bash bin/install-cron.sh --remove
+
+.PHONY: uninstall
+uninstall: uninstall-cron ## Alias for uninstall-cron (back-compat)
 
 # ---------------------------------------------------------------------------
 # Workspace ops across managed projects
@@ -67,8 +70,8 @@ doctor-llm: ## LLM-driven posture check (slower, more verbose narrative)
 	@claude -p "/lsr-maintainer doctor"
 
 .PHONY: run
-run: ## Full nightly run (use cron entry for unattended scheduling)
-	@claude -p "/lsr-maintainer run"
+run: ## Full run on demand. Live narration to terminal; full transcript + cost meter via bin/lsr-maintainer-run.sh.
+	@bash bin/lsr-maintainer-run.sh
 
 .PHONY: dry-run
 dry-run: ## Show what tonight would do, change nothing
