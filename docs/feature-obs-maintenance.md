@@ -75,4 +75,4 @@ make pending  # the agent's summary
 
 ## Manual override
 
-To pause the OBS path: `make uninstall` removes cron; you can run targeted ops manually via `osc` while still benefiting from the hooks (they're enforced in any session that loads `.claude/settings.json`).
+To pause the OBS path: `make uninstall-cron` removes the cron entry; you can run targeted ops manually via `osc` while still benefiting from the hooks (they're enforced in any session that loads `.claude/settings.json`).

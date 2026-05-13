@@ -2,8 +2,8 @@
 
 Idempotent host preparation. Safe to run repeatedly. Designed for two contexts:
 
-1. **One-shot setup** — user runs `make install` on a fresh machine, which invokes `bin/install-deps.sh` (which does most of the work) and then this workflow tops it off.
-2. **Pre-flight inside `/lsr-maintainer run`** — every scheduled run calls this first as a posture check. Must complete in <60 seconds.
+1. **One-shot setup** — user runs `make install` on a fresh machine (host prep only — no cron). Cron is opt-in via `make install-cron` later if the user wants scheduled runs. This workflow is invoked from `bin/install-deps.sh` to top off the bootstrap.
+2. **Pre-flight inside `/lsr-maintainer run`** — every run (manual `make run` OR scheduled cron) calls this first as a posture check. Must complete in <60 seconds.
 
 ## Outputs
 
@@ -175,7 +175,8 @@ Bug-fix commits need this (issue #11).
 ```bash
 crontab -l 2>/dev/null | grep -q '# lsr-maintainer-workspace' \
   && components_ready.cron_registered = true \
-  || pending_actions.append("Run make install-cron")
+  # Cron is opt-in. Report status only — do NOT surface a PENDING action.
+  # The user chooses to install cron via `make install-cron` when ready.
 ```
 
 ### 10. MCP config

@@ -32,7 +32,7 @@ Idempotent host preparation. Safe to run repeatedly. Designed for `/lsr-maintain
 
    **SLE 16 → Leap 16 fallback**: if `sle-16` glob has no match but `leap-16.0` does, mark `components_ready.qemu_images.sle-16` as `"fallback_to_leap-16.0"` (truthy). The `tox-test-runner` honors this fallback per `tox-test-runner.md` §2.
 7. **Auth** — run `gh auth status` and `osc whois` non-interactively. Token/password not printed. If either fails, emit PENDING "Run ./bin/setup.sh to re-auth."
-8. **Cron** — check if the cron entry is registered (`crontab -l | grep -q "# lsr-maintainer-workspace"`). If not, emit PENDING "Run `make install-cron` to schedule nightly runs."
+8. **Cron** (optional, opt-in) — check if a cron entry is registered (`crontab -l | grep -q "# lsr-maintainer-workspace"`). The workspace runs manual-only by default; **absence of cron is NOT an error**. Report the status as informational only: `components_ready.cron_registered = true | false`. Do not emit a PENDING action to install cron — the user opts in when they want via `make install-cron`.
 9. **Write bootstrap state** — `state/.bootstrap-state.json` with `components_ready` map.
 
 ## Output

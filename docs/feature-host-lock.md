@@ -71,7 +71,7 @@ If you flip the flag on a workspace that's been moved multiple times, the stored
 A cron run on a wrong host exits 1 every night and fires `notify(host_lock_mismatch)`. If you have ntfy/email/webhook configured, you'll get nightly alerts until you either:
 
 - ack from a TTY (legitimate move), OR
-- remove the cron entry (`make uninstall`), OR
+- remove the cron entry (`make uninstall-cron`), OR
 - disable the lock (`config.security.enforce_host_lock: false`).
 
 ## When to enable

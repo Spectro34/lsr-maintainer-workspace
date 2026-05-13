@@ -114,7 +114,7 @@ See [SECURITY.md](SECURITY.md) and [docs/component-hooks.md](docs/component-hook
 
 ## Schedule and lifecycle
 
-- **Trigger**: cron, nightly at `config.schedule.cron_time` (default `7 3 * * *`, 03:07 local). `install-cron.sh` emits a `CRON_TZ=` line derived from `timedatectl` so the entry fires at LOCAL time even when systemd-cron defaults to UTC. Override via `LSR_CRON_TIME` / `LSR_CRON_TZ` envs.
+- **Trigger**: `make run` (manual, on-demand — the default) or cron (opt-in, nightly at `config.schedule.cron_time`, default `7 3 * * *` 03:07 local). Both paths invoke `bin/lsr-maintainer-run.sh` identically: same `--permission-mode acceptEdits`, same stream-json transcript, same cost meter, same hook layer. The only difference is who fires it. `install-cron.sh` emits a `CRON_TZ=` line derived from `timedatectl` so the entry fires at LOCAL time even when systemd-cron defaults to UTC. Override via `LSR_CRON_TIME` / `LSR_CRON_TZ` envs.
 - **Doctor pre-flight**: every run starts with `bash bin/doctor.sh` (10 checks in pure bash, sub-second). Aborts cleanly if any red item is present. `bin/lsr-maintainer-run.sh` is the actual entry point.
 - **Time budget**: default 90 min per run from `config.schedule.time_budget_minutes`; per-item soft caps from `config.schedule.per_item_budgets`.
 - **Resumability**: state is the source of truth across runs. Each run reads `last_run_completed_at`, `last_run_aborted`, the priority queue, per-PR cursors, per-role tested-SHAs. A missed run picks up where the last successful one left off.

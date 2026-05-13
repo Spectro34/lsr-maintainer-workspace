@@ -16,32 +16,39 @@ fresh VM, no agent installed yet
    ▼
 3. User: make install
    │
-   ├─ install-deps.sh
-   │    ├─ creates required dirs
-   │    ├─ verifies inlined `.claude/skills/lsr-agent/SKILL.md` is present
-   │    └─ checks tox-lsr venv (or surfaces creation steps)
-   │
-   └─ install-cron.sh
-        └─ adds nightly entry (idempotent)
+   └─ install-deps.sh   (host prep only — NO cron by default)
+        ├─ creates required dirs
+        ├─ verifies inlined `.claude/skills/lsr-agent/SKILL.md` is present
+        └─ checks tox-lsr venv (or surfaces creation steps)
    │
    ▼
-4. User: claude -p "/lsr-maintainer doctor"
+4. User: bash bin/doctor.sh   (static check, <1s, no claude -p)
    │
    ▼
 5. Doctor reports green/red:
-   - system_packages       (red → user runs sudo zypper/apt/...)
-   - directories           (auto-fixed by install-deps)
-   - lsr_agent_skill       (red → workspace clone is incomplete; re-clone with --recurse-submodules)
-   - tox_venv              (red → bootstrap-runner creates it on next run)
-   - qemu_images           (red → user downloads images per SETUP.md)
+   - state/config.json     (red → user re-runs setup.sh)
    - gh_auth               (red → user re-runs setup.sh)
    - osc_auth              (red → user re-runs setup.sh)
-   - cron_registered       (red → user runs make install-cron)
+   - tox_venv              (yellow → bootstrap-runner creates it on next run)
+   - lsr-agent skill       (red → workspace clone is incomplete; re-clone with --recurse-submodules)
+   - qemu_images           (yellow → user downloads images per SETUP.md)
+   - cron_registered       (yellow if absent — that's expected when running manual-only)
+   - hook test harness     (red → fix hooks; never run the agent with broken hooks)
    │
    ▼
-6. Each scheduled run starts with a doctor pre-flight; if posture has drifted
-   (token revoked, oscrc gone), the run aborts with a PENDING entry pointing
-   back to ./bin/setup.sh. State is not touched.
+6. User runs the agent on demand:
+       make run            # live narration in terminal
+       make pending        # read state/PENDING_REVIEW.md afterwards
+
+7. (Optional) User opts in to scheduled runs later:
+       make install-cron   # nightly at 03:07 local
+       make uninstall-cron # turn it off
+       touch state/.halt   # pause without removing cron (e.g., vacation)
+
+Each run (manual OR scheduled) starts with a doctor pre-flight inside
+bin/lsr-maintainer-run.sh; if posture has drifted (token revoked, oscrc
+gone), the run aborts with a PENDING entry pointing back to ./bin/setup.sh.
+State is not touched.
 ```
 
 ## Host fingerprint
@@ -64,9 +71,9 @@ State (`state/.lsr-maintainer-state.json`) is portable across hosts because it's
 podman run --rm -it -v $(pwd):/repo:Z opensuse/tumbleweed bash
 cd /repo
 zypper install -y git python3 gh osc make jq
-./bin/setup.sh   # interactive
-make install
-claude -p "/lsr-maintainer doctor"
+./bin/setup.sh         # interactive
+make install           # host prep only — no cron
+bash bin/doctor.sh     # green/yellow/red posture check
 ```
 
-The doctor output is the contract: it tells you exactly what's missing and the command to fix each item.
+The doctor output is the contract: it tells you exactly what's missing and the command to fix each item. Cron is intentionally absent from the install — opt in via `make install-cron` when you're ready for scheduled runs.

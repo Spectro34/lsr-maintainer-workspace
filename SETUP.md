@@ -117,21 +117,23 @@ cd lsr-maintainer-workspace
 
 This re-runs the verifications above non-interactively, walks you through anything missing, and writes `state/.setup-complete.json` (public info only — login names + timestamps, no credentials).
 
-## 6. Install
+## 6. Install (host prep, no cron by default)
 
 ```bash
 make install
 ```
 
-Idempotent. Builds the tox-lsr venv, creates required directories, installs the nightly cron entry.
+Idempotent. Builds the tox-lsr venv, creates required directories, initializes submodules. **Does NOT install a cron entry** — the agent is manual-only until you opt in to scheduling (see §10 below).
 
 ## 7. Verify
 
 ```bash
-claude -p "/lsr-maintainer doctor"
+bash bin/doctor.sh        # fast static check (<1s, no claude -p)
+# or
+make doctor-llm           # LLM-driven verbose check (slower)
 ```
 
-Should return a green/red table covering: tox venv, QEMU images per target, `gh auth`, `osc auth`, cron registered, submodules at expected pins.
+Should return a green/red table covering: `state/config.json`, `gh auth`, `osc auth`, tox venv, QEMU images per target, lsr-agent skill present, hook test harness, hook drift, submodule pins. With manual-only operation, "cron registered" will be yellow — that's expected.
 
 ## Disk and RAM expectations
 
@@ -159,6 +161,34 @@ Every one of these paths is a key in `state/config.json::paths`. Override any va
 ## 8. Day-2 configuration (optional)
 
 After `make install` succeeds, `state/config.json` is v3 with all defaults filled in. None of the sections below need to be touched for the agent to work — they're optional knobs.
+
+### Run when you want
+
+```bash
+make run          # full run on demand; live narration to terminal
+make pending      # read state/PENDING_REVIEW.md afterwards
+```
+
+`make run` is `bash bin/lsr-maintainer-run.sh` under the hood — same script, same `--permission-mode acceptEdits`, same transcript capture, same cost meter. The agent narrates its work live in your terminal as it goes.
+
+### Schedule nightly runs (optional)
+
+```bash
+make install-cron       # 03:07 local by default; configurable via state/config.json::schedule.cron_time
+```
+
+To stop scheduled runs:
+
+```bash
+make uninstall-cron     # removes the cron entry; workspace + state untouched
+```
+
+To pause without removing the cron entry:
+
+```bash
+touch state/.halt        # next cron tick exits cleanly
+rm state/.halt           # resume
+```
 
 ### Schedule SLE-enablement work
 
