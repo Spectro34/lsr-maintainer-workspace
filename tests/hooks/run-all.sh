@@ -396,11 +396,17 @@ GIT_PUSH_PLAUSIBLE_OK=(
   '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}|R5 git push origin OK'
   '{"tool_name":"Bash","tool_input":{"command":"git push fork main"}}|R5 git push fork OK'
 )
+# Run from a non-git tmpdir so `git remote get-url origin` fails and the hook
+# falls into the "plausible-remote-name" fallback (which is what this test
+# section verifies). Without this, the test result depends on whatever URL
+# the host's workspace origin happens to point at — brittle across forks.
+PUSH_TMPDIR="$(mktemp -d -t lsr-test-push.XXXXXX)"
 for entry in "${GIT_PUSH_PLAUSIBLE_OK[@]}"; do
   desc="${entry##*|}"; json="${entry%|*}"
-  code=$(run_hook "$UPSTREAM" "$json")
+  code=$(cd "$PUSH_TMPDIR" && bash "$UPSTREAM" <<<"$json" >/dev/null 2>&1; echo $?)
   check "ALLOW $desc" "0" "$code"
 done
+rm -rf "$PUSH_TMPDIR"
 
 # ---- Pre-init safety: with empty config, ALL writes must be blocked ----
 echo "== pre-init safety (empty config blocks everything) =="
