@@ -12,10 +12,10 @@ Idempotent host preparation. Safe to run repeatedly. Designed for `/lsr-maintain
 2. **System packages** — check for presence of `git`, `python3`, `gh`, `osc`, `make`, `jq`, `qemu-system-x86`. If any missing, emit a PENDING entry with the exact install command for the detected OS. Do NOT run sudo/zypper/apt/dnf — those are blocked.
 3. **Directories** — `bin/install-deps.sh` already handles this on first install; replay the logic here for idempotency (mkdir -p ...).
 4. **Symlink target check** — `projects/lsr-agent` should resolve. If broken (running on a host without `~/github/rnd/lsr-agent/`), emit PENDING "Clone the upstream skill-lifecycle-framework repo (whichever fork you use) to ~/github/rnd/ for the lsr-agent symlink to resolve."
-5. **tox-lsr venv** — check `~/github/ansible/testing/tox-lsr-venv/bin/activate` exists. If not:
-   - Create venv: `python3 -m venv ~/github/ansible/testing/tox-lsr-venv`
-   - Install: `~/github/ansible/testing/tox-lsr-venv/bin/pip install tox-lsr` (pin to the version in `references/tox-lsr-pin.txt` if present).
-   - Run `~/github/ansible/scripts/patch-tox-lsr.sh` (clone the host-scripts first if missing — `git clone <eventual-repo-url> ~/github/ansible/scripts`).
+5. **tox-lsr venv** — resolve `paths.tox_venv` via `orchestrator.config.get_path(cfg, "tox_venv")` (default `<workspace>/var/venv/tox-lsr`). Check `<tox_venv>/bin/activate` exists. If not:
+   - Create venv: `python3 -m venv <tox_venv>`
+   - Install: `<tox_venv>/bin/pip install tox-lsr` (pin to the version in `references/tox-lsr-pin.txt` if present).
+   - Run `<paths.host_scripts>/patch-tox-lsr.sh` (clone the host-scripts first into `<paths.host_scripts>` if missing).
 6. **QEMU images** — detect by glob pattern (target → glob, see `tox-test-runner.md`):
    - `sle-16`     → `SLES-16.0-*Minimal-VM*.x86_64*.qcow2`
    - `leap-16.0`  → `Leap-16.0-Minimal-VM*.x86_64*Cloud*.qcow2`
@@ -51,7 +51,7 @@ Idempotent host preparation. Safe to run repeatedly. Designed for `/lsr-maintain
     "cron_registered": true
   },
   "pending_actions": [
-    "Download SLES15-SP7-Minimal-VM image to ~/iso/ (see SETUP.md §4 for source)"
+    "Download SLES15-SP7-Minimal-VM image to <paths.iso_dir> (see SETUP.md §4 for source)"
   ]
 }
 ```

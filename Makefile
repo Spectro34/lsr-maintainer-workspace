@@ -114,11 +114,12 @@ test-orchestrator: ## Run orchestrator Python self-tests (config + state + manif
 	@echo "== orchestrator/cost_meter self-test =="
 	@python3 -m orchestrator.cost_meter
 	@echo "== orchestrator/manifest_parse smoke (requires real spec) =="
-	@spec=$$(find $$HOME/github/ansible -name 'ansible-linux-system-roles.spec' 2>/dev/null | head -1); \
+	@ansible_root=$$(python3 -c "import sys; sys.path.insert(0,'.'); from orchestrator.config import load_config, get_path; print(get_path(load_config('state/config.json'), 'ansible_root'))"); \
+	spec=$$(find "$$ansible_root" -name 'ansible-linux-system-roles.spec' 2>/dev/null | head -1); \
 	if [ -n "$$spec" ]; then \
 	  python3 orchestrator/manifest_parse.py "$$spec" >/dev/null && echo "OK manifest parse ($$spec)"; \
 	else \
-	  echo "SKIP manifest parse (no spec file on this host — first 'osc co' will fetch it)"; \
+	  echo "SKIP manifest parse (no spec file under $$ansible_root — first 'osc co' will fetch it)"; \
 	fi
 
 .PHONY: test-all
@@ -132,12 +133,18 @@ test-all: test ## Alias: run workspace tests AND per-project tests
 # ---------------------------------------------------------------------------
 
 .PHONY: clean
-clean: ## Remove state runtime artefacts (keeps workspace + submodules)
+clean: ## Remove state runtime artefacts (keeps workspace + var/ + submodules)
 	@rm -f state/.lsr-maintainer-state.json state/.bootstrap-state.json state/PENDING_REVIEW.md
 	@rm -rf state/cache
 
+.PHONY: clean-var
+clean-var: ## Reset mutable runtime data — wipes var/{iso,worktrees,cache}; preserves var/{log,venv} + clones
+	@rm -rf var/iso/* var/worktrees/* var/cache/* 2>/dev/null || true
+	@echo "var/log/ and var/venv/ preserved. To re-download Leap 16: rm var/iso/.leap-16.0-download-attempted then make install-deps."
+
 .PHONY: distclean
-distclean: clean ## Also wipe tox venv and worktrees
+distclean: clean ## Also wipe var/ entirely (logs, venv, clones, ISO, everything)
 	@rm -rf state/worktrees
-	@rm -rf ~/.cache/lsr-maintainer
-	@echo "tox venv at ~/github/ansible/testing/tox-lsr-venv/ NOT removed — delete manually if you want."
+	@rm -rf var/
+	@tox_venv=$$(python3 -c "import sys; sys.path.insert(0,'.'); from orchestrator.config import load_config, get_path; print(get_path(load_config('state/config.json'), 'tox_venv'))"); \
+	echo "Removed var/. Tox venv at $$tox_venv is gone too — 'make install-deps' will recreate."

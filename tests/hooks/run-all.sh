@@ -469,8 +469,8 @@ SELFMOD_DENY=(
   '{"tool_name":"Edit","tool_input":{"file_path":"/home/spectro/.config/osc/oscrc","old_string":"a","new_string":"b"}}|Edit to oscrc'
   '{"tool_name":"Edit","tool_input":{"file_path":"/home/spectro/.claude/settings.json","old_string":"a","new_string":"b"}}|Edit to user-global Claude settings'
   '{"tool_name":"NotebookEdit","tool_input":{"notebook_path":"'"$WORKSPACE"'/.claude/skills/lsr-maintainer/SKILL.md","new_source":"x"}}|NotebookEdit SKILL.md'
-  '{"tool_name":"Write","tool_input":{"file_path":"/home/spectro/.cache/lsr-maintainer/security.log","content":""}}|#16 Write to audit log forbidden'
-  '{"tool_name":"Edit","tool_input":{"file_path":"/home/spectro/.cache/lsr-maintainer/20260512T030700.jsonl","old_string":"a","new_string":""}}|#16 Edit transcript forbidden'
+  '{"tool_name":"Write","tool_input":{"file_path":"'"$WORKSPACE"'/var/log/security.log","content":""}}|#16 Write to audit log forbidden'
+  '{"tool_name":"Edit","tool_input":{"file_path":"'"$WORKSPACE"'/var/log/20260512T030700.jsonl","old_string":"a","new_string":""}}|#16 Edit transcript forbidden'
 )
 for entry in "${SELFMOD_DENY[@]}"; do
   desc="${entry##*|}"; json="${entry%|*}"
@@ -538,6 +538,30 @@ for entry in "${GHAPI_FORM_DENY[@]}"; do
   code=$(run_hook "$UPSTREAM" "$json")
   check "DENY  $desc" "2" "$code"
 done
+
+# ---- bin/_lib/paths.sh — workspace-relative path resolution ----
+echo "== bin/_lib/paths.sh resolves paths under workspace =="
+PATHS_RESULT=$(bash -c "source '$WORKSPACE/bin/_lib/paths.sh'; lsr_path iso_dir")
+case "$PATHS_RESULT" in
+  "$WORKSPACE"/var/iso)
+    PASS=$((PASS+1))
+    echo "PASS  lsr_path iso_dir → $PATHS_RESULT" ;;
+  *)
+    FAIL=$((FAIL+1))
+    FAIL_LINES+=("FAIL  lsr_path iso_dir expected '$WORKSPACE/var/iso' got '$PATHS_RESULT'")
+    echo "FAIL  lsr_path iso_dir expected '$WORKSPACE/var/iso' got '$PATHS_RESULT'" ;;
+esac
+
+LOG_RESULT=$(bash -c "source '$WORKSPACE/bin/_lib/paths.sh'; lsr_path log_dir")
+case "$LOG_RESULT" in
+  "$WORKSPACE"/var/log)
+    PASS=$((PASS+1))
+    echo "PASS  lsr_path log_dir → $LOG_RESULT" ;;
+  *)
+    FAIL=$((FAIL+1))
+    FAIL_LINES+=("FAIL  lsr_path log_dir expected '$WORKSPACE/var/log' got '$LOG_RESULT'")
+    echo "FAIL  lsr_path log_dir expected '$WORKSPACE/var/log' got '$LOG_RESULT'" ;;
+esac
 
 # ---------------------------------------------------------------- summary
 echo ""

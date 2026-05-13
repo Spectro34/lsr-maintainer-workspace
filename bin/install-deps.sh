@@ -10,20 +10,25 @@ set -u
 WORKSPACE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$WORKSPACE" || exit 1
 
+# shellcheck source=_lib/paths.sh
+source "$WORKSPACE/bin/_lib/paths.sh"
+
 ok()   { printf '\033[32mOK  \033[0m %s\n' "$*"; }
 warn() { printf '\033[33mWARN\033[0m %s\n' "$*"; }
 err()  { printf '\033[31mERR \033[0m %s\n' "$*"; }
 
-# --- 1. dirs ---
+# --- 1. dirs (all in-workspace via paths.* in state/config.json) ---
+ANSIBLE_ROOT="$(lsr_path ansible_root)"
 DIRS=(
-  "$HOME/.cache/lsr-maintainer"
-  "$HOME/.claude/obs-packages/context"
-  "$HOME/github/ansible/upstream"
-  "$HOME/github/ansible/testing"
-  "$HOME/github/ansible/scripts"
-  "$HOME/github/ansible/patches/lsr"
-  "$HOME/github/linux-system-roles"
-  "$HOME/github/.lsr-maintainer-worktrees"
+  "$(lsr_path log_dir)"
+  "$(lsr_path cache_dir)/obs-packages/context"
+  "$ANSIBLE_ROOT/upstream"
+  "$ANSIBLE_ROOT/testing"
+  "$(lsr_path host_scripts)"
+  "$ANSIBLE_ROOT/patches/lsr"
+  "$(lsr_path lsr_clones_root)"
+  "$(lsr_path worktrees_root)"
+  "$(dirname "$(lsr_path tox_venv)")"
   "$WORKSPACE/state/cache"
   "$WORKSPACE/state/worktrees"
 )
@@ -59,7 +64,7 @@ if [[ -L projects/lsr-agent ]]; then
 fi
 
 # --- 4. tox-lsr venv (best-effort) ---
-TOX_VENV="$HOME/github/ansible/testing/tox-lsr-venv"
+TOX_VENV="$(lsr_path tox_venv)"
 if [[ -d "$TOX_VENV/bin" ]]; then
   ok "tox-lsr venv exists at $TOX_VENV"
 else
@@ -67,7 +72,7 @@ else
 fi
 
 # --- 4b. Leap 16 image (auto-download from download.opensuse.org if missing) ---
-ISO_DIR="$HOME/iso"
+ISO_DIR="$(lsr_path iso_dir)"
 mkdir -p "$ISO_DIR"
 
 has_image_for() {

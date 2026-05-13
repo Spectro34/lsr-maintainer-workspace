@@ -18,12 +18,12 @@
 
 set -u
 
-SECURITY_LOG="${HOME}/.cache/lsr-maintainer/security.log"
-mkdir -p "$(dirname "$SECURITY_LOG")" 2>/dev/null || true
-
 # Locate workspace root via the hook script's own path.
 HOOK_DIR="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
 WORKSPACE_ROOT="$(dirname "$(dirname "$HOOK_DIR")")"
+
+SECURITY_LOG="${WORKSPACE_ROOT}/var/log/security.log"
+mkdir -p "$(dirname "$SECURITY_LOG")" 2>/dev/null || true
 
 emit_block() {
   local reason="$1"
@@ -112,7 +112,7 @@ case "$real" in
   # Audit log + transcripts (issue #16): the agent must not be able to
   # truncate or rewrite the very logs that record what it did. Hooks append
   # in append-mode; this PreToolUse block prevents Write/Edit from racing.
-  "$HOME"/.cache/lsr-maintainer/*)
+  "$WORKSPACE_ROOT"/var/log/*)
     emit_block "$tool against audit/transcript path $real is forbidden (preserves forensic trail)." "$real" ;;
 esac
 

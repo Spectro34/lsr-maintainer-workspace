@@ -15,7 +15,7 @@ Role scope: every role in `state.roles` (the orchestrator pre-seeds these from `
 
 1. `git ls-remote https://github.com/linux-system-roles/<role>.git refs/heads/<branch>` to get the upstream HEAD SHA without cloning.
 2. If equal to `last_seen_upstream_sha`, no drift — skip.
-3. Otherwise, in a local clone (under `~/github/linux-system-roles/<role>/`), `git fetch upstream` (or `origin` if remote is upstream) and `git log --oneline <last_seen>..<new_head>`.
+3. Otherwise, in a local clone (under `<paths.lsr_clones_root>/<role>/`; resolve via `get_path(cfg, "lsr_clones_root")`, default `<workspace>/var/clones/`), `git fetch upstream` (or `origin` if remote is upstream) and `git log --oneline <last_seen>..<new_head>`.
 4. For each new commit, `git show --name-only --format= <sha>` and check intersection with `state.roles[role].patched_files`.
 5. Classify:
    - No intersection → emit `{kind: "upstream_drift_clean", role, new_shas: [...]}` (info-only, no action)

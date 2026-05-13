@@ -9,10 +9,30 @@ set -u
 WORKSPACE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$WORKSPACE" || exit 1
 
+# shellcheck source=_lib/paths.sh
+source "$WORKSPACE/bin/_lib/paths.sh"
+
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 warn() { printf '\033[33mWARN\033[0m %s\n' "$*"; }
 err()  { printf '\033[31mERR \033[0m %s\n' "$*"; }
 ok()   { printf '\033[32mOK  \033[0m %s\n' "$*"; }
+
+# Migration advisory: detect pre-self-containment installs and tell the
+# operator how to reuse existing clones/ISOs without re-downloading.
+if [[ -d "$HOME/github/linux-system-roles" || -d "$HOME/iso" || -d "$HOME/github/ansible" ]] \
+   && [[ ! -e "$WORKSPACE/var" ]]; then
+  warn "Detected pre-self-containment layout at \$HOME/github/{ansible,linux-system-roles} or \$HOME/iso."
+  warn "The new layout uses \$WORKSPACE/var/{ansible,clones,iso}. To reuse existing data without re-downloading:"
+  warn "  mkdir -p '$WORKSPACE/var'"
+  [[ -d "$HOME/iso" ]] && \
+    warn "  ln -s '$HOME/iso' '$WORKSPACE/var/iso'"
+  [[ -d "$HOME/github/linux-system-roles" ]] && \
+    warn "  ln -s '$HOME/github/linux-system-roles' '$WORKSPACE/var/clones'"
+  [[ -d "$HOME/github/ansible" ]] && \
+    warn "  ln -s '$HOME/github/ansible' '$WORKSPACE/var/ansible'"
+  warn "Or skip and let 'make install' create fresh dirs under \$WORKSPACE/var/."
+  echo ""
+fi
 
 bold "=== lsr-maintainer setup ==="
 echo ""
@@ -84,7 +104,7 @@ fi
 
 # ---------------------------------------------------------------- QEMU
 bold "[4/5] QEMU images"
-ISO_DIR="${HOME}/iso"
+ISO_DIR="$(lsr_path iso_dir)"
 mkdir -p "$ISO_DIR"
 
 # Image detection: match by glob pattern, not exact filename. SUSE/openSUSE

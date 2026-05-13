@@ -8,7 +8,10 @@
 set -u
 
 WORKSPACE="$(cd "$(dirname "$0")/.." && pwd)"
-LOG_DIR="${HOME}/.cache/lsr-maintainer"
+# shellcheck source=_lib/paths.sh
+source "$WORKSPACE/bin/_lib/paths.sh"
+
+LOG_DIR="$(lsr_path log_dir)"
 mkdir -p "$LOG_DIR"
 
 ts="$(date +%Y%m%d-%H%M%S)"

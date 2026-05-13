@@ -92,7 +92,7 @@ osc ls home:$(osc whois | awk '{print $1}')
 
 ## 4. QEMU images
 
-The agent runs tox-LSR tests against SUSE/openSUSE images at `~/iso/`. The agent detects images by **glob pattern**, so variants are fine (e.g., `-20G`, `-GM`, `Full-VM` vs `Minimal-VM`).
+The agent runs tox-LSR tests against SUSE/openSUSE images at `./var/iso/` inside this workspace (the `paths.iso_dir` key in `state/config.json`; override with an absolute path like `/mnt/big/iso` if you keep images elsewhere). The agent detects images by **glob pattern**, so variants are fine (e.g., `-20G`, `-GM`, `Full-VM` vs `Minimal-VM`).
 
 **Per-target glob patterns:**
 
@@ -105,19 +105,20 @@ The agent runs tox-LSR tests against SUSE/openSUSE images at `~/iso/`. The agent
 
 **SLE 16 → Leap 16 fallback**: if you don't have the SLE 16 image (it's license-restricted, not freely redistributable), the agent transparently runs `sle-16`-target tests against Leap 16. ansible-core version is the same (2.20); `os_family` is `Suse` for both. For LSR compatibility testing this is close enough — package vendor strings differ but the load-bearing pieces (Python version, NetworkManager, sudo path, syslog setup) are identical.
 
-**Downloading Leap 16 (the agent does this automatically when missing):**
+**Downloading Leap 16:** `make install-deps` auto-fetches it into `./var/iso/` if missing (~330 MB; 7-day re-download guard prevents nightly cron from re-pulling it). `./bin/setup.sh` offers to do this interactively too. `bootstrap-runner` does the same autonomously during a scheduled run if the workspace is configured with `state/.bootstrap-state.json::config.auto_download_leap == true` (the default).
+
+To grab it by hand:
 
 ```bash
+. bin/_lib/paths.sh                            # exposes lsr_path
 curl -fL --progress-bar \
-  -o ~/iso/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2 \
+  -o "$(lsr_path iso_dir)/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2" \
   https://download.opensuse.org/distribution/leap/16.0/appliances/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2
 ```
 
-Size: ~330 MB. `./bin/setup.sh` offers to do this interactively; `bootstrap-runner` does it autonomously during a scheduled run if the workspace is configured with `state/.bootstrap-state.json::config.auto_download_leap == true` (the default).
-
 **To opt out of auto-download** (e.g., metered connection): edit `state/.bootstrap-state.json` and set `"config": {"auto_download_leap": false}` before the first scheduled run.
 
-**License-restricted images (SLE 15 SP7, SLE 16, SLE 16 Full)**: the agent will never download these. If you have credentials for SUSE Customer Center, download manually and place at `~/iso/`. The agent's `doctor` command reports which are present and tells you which targets will run.
+**License-restricted images (SLE 15 SP7, SLE 16, SLE 16 Full)**: the agent will never download these. If you have credentials for SUSE Customer Center, download manually and place at `./var/iso/` (or wherever `paths.iso_dir` resolves). The agent's `doctor` command reports which are present and tells you which targets will run.
 
 ## 5. Run setup.sh
 
@@ -146,6 +147,23 @@ Should return a green/red table covering: tox venv, QEMU images per target, `gh 
 
 ## Disk and RAM expectations
 
-- Disk: ~20 GB for QEMU images + ~5 GB for tox venvs and worktrees.
+- Disk: ~20 GB for QEMU images + ~5 GB for tox venvs and worktrees, **all under `./var/`** inside this workspace. Move the workspace, move the data with it. `rm -rf var/` is a full reset.
 - RAM: 4 GB free during tox tests (each QEMU VM uses ~2 GB; tests run one VM at a time per role).
 - Network: agent assumes GitHub + OBS reachable; tox tests need DNS for SUSEConnect / package mirrors.
+
+## Where things live
+
+After `make install`:
+
+```
+lsr-maintainer-workspace/var/
+  iso/             QEMU images (Leap auto-downloaded; SLE manual)
+  clones/<role>/   Per-role fork clones (one per managed role)
+  worktrees/       Rebase + fix-implementer worktrees
+  ansible/         OBS checkout + tox + patches + scripts
+  venv/tox-lsr/    Tox-lsr virtualenv
+  log/             security.log + nightly run transcripts (jsonl/txt)
+  cache/           obs-packages context, misc caches
+```
+
+Every one of these paths is a key in `state/config.json::paths`. Override any value (e.g., to point `iso_dir` at `/mnt/big/iso`) and the agent picks it up at next run — see [docs/component-config.md](docs/component-config.md).

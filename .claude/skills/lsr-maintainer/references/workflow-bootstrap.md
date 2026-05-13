@@ -36,7 +36,7 @@ Idempotent host preparation. Safe to run repeatedly. Designed for two contexts:
     "mcp_config": true
   },
   "pending_actions": [
-    "Download SLES15-SP7 image to ~/iso/ (see SETUP.md §4)"
+    "Download SLES15-SP7 image to <paths.iso_dir> (see SETUP.md §4)"
   ]
 }
 ```
@@ -79,19 +79,22 @@ Emit PENDING with the exact command for the user to run. **Never run sudo** (blo
 
 ### 3. Directories
 
+All runtime dirs live inside the workspace tree. Resolve via `orchestrator.config.get_path`:
+
 ```python
-for d in [
-  "~/.cache/lsr-maintainer",
-  "~/github/ansible/upstream",
-  "~/github/ansible/testing",
-  "~/github/ansible/scripts",
-  "~/github/ansible/patches/lsr",
-  "~/github/linux-system-roles",
-  "~/github/.lsr-maintainer-worktrees",
-  "<workspace>/state/cache",
-  "<workspace>/state/worktrees",
-  "~/.claude/obs-packages/context",   # for obs-package-skill (issue #9)
-]:
+from orchestrator.config import load_config, get_path
+cfg = load_config("<workspace>/state/config.json")
+for key in ["log_dir", "cache_dir", "ansible_root", "lsr_clones_root",
+            "worktrees_root", "host_scripts"]:
+  os.makedirs(get_path(cfg, key), exist_ok=True)
+# Ansible sub-tree:
+ansible = get_path(cfg, "ansible_root")
+for sub in ["upstream", "testing", "patches/lsr"]:
+  os.makedirs(f"{ansible}/{sub}", exist_ok=True)
+# obs-package-skill context (issue #9):
+os.makedirs(f"{get_path(cfg, 'cache_dir')}/obs-packages/context", exist_ok=True)
+# Workspace-internal state dirs are workspace-relative directly:
+for d in ["<workspace>/state/cache", "<workspace>/state/worktrees"]:
   os.makedirs(os.path.expanduser(d), exist_ok=True)
 ```
 
@@ -110,7 +113,7 @@ fi
 ### 5. tox-lsr venv
 
 ```python
-tox_venv = os.path.expanduser("~/github/ansible/testing/tox-lsr-venv")
+tox_venv = get_path(cfg, "tox_venv")
 if not os.path.exists(f"{tox_venv}/bin/activate"):
   # Create
   subprocess.run(["python3", "-m", "venv", tox_venv], check=True)
@@ -118,20 +121,22 @@ if not os.path.exists(f"{tox_venv}/bin/activate"):
   pin = open(".claude/skills/lsr-maintainer/references/tox-lsr-pin.txt").read().strip()
   subprocess.run([f"{tox_venv}/bin/pip", "install", pin], check=True)
   # Apply SUSE patches
-  subprocess.run(["bash", os.path.expanduser("~/github/ansible/scripts/patch-tox-lsr.sh"), tox_venv])
+  patch_script = f"{get_path(cfg, 'host_scripts')}/patch-tox-lsr.sh"
+  subprocess.run(["bash", patch_script, tox_venv])
 ```
 
-If `~/github/ansible/scripts/patch-tox-lsr.sh` is missing, surface PENDING (the host-scripts repo carve-out from `projects/ansible-host-scripts/` hasn't happened yet).
+If `<host_scripts>/patch-tox-lsr.sh` is missing, surface PENDING (the host-scripts repo carve-out from `projects/ansible-host-scripts/` hasn't happened yet).
 
 ### 6. QEMU images
 
-For each target, check the glob in `~/iso/` (patterns from `tox-test-runner.md`).
+For each target, check the glob in `<paths.iso_dir>` (resolve via `get_path(cfg, "iso_dir")`; default `<workspace>/var/iso/`; patterns from `tox-test-runner.md`).
 
 Special case Leap 16 — auto-download if missing:
 
 ```bash
 LEAP_URL="https://download.opensuse.org/distribution/leap/16.0/appliances/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2"
-OUT="$HOME/iso/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2"
+ISO_DIR="$(lsr_path iso_dir)"   # bin/_lib/paths.sh helper
+OUT="$ISO_DIR/Leap-16.0-Minimal-VM.x86_64-Cloud.qcow2"
 
 # Skip if downloaded recently (< 7 days) — prevents re-download nightly
 if [ -f "$OUT" ] && [ "$(find "$OUT" -mtime -7)" ]; then

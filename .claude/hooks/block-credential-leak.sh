@@ -11,7 +11,11 @@
 
 set -u
 
-SECURITY_LOG="${HOME}/.cache/lsr-maintainer/security.log"
+# Locate workspace root via this hook's own path.
+HOOK_DIR="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+WORKSPACE_ROOT="$(dirname "$(dirname "$HOOK_DIR")")"
+
+SECURITY_LOG="${WORKSPACE_ROOT}/var/log/security.log"
 mkdir -p "$(dirname "$SECURITY_LOG")" 2>/dev/null || true
 
 # Credential path patterns (glob-ish, used in shell case matching).

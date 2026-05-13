@@ -14,6 +14,9 @@ trap 'printf "${RED:-}ERROR${NC:-} doctor.sh crashed at line %s — treat as red
 WORKSPACE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$WORKSPACE" || exit 1
 
+# shellcheck source=_lib/paths.sh
+source "$WORKSPACE/bin/_lib/paths.sh"
+
 GREEN='\033[32m'; YELLOW='\033[33m'; RED='\033[31m'; CYAN='\033[36m'; NC='\033[0m'
 
 PASS=0; WARN=0; FAIL=0
@@ -53,8 +56,9 @@ else
 fi
 
 # 4. tox-lsr venv
-if [[ -d "$HOME/github/ansible/testing/tox-lsr-venv/bin" ]]; then
-  emit_pass "tox-lsr venv"          "$HOME/github/ansible/testing/tox-lsr-venv"
+tox_venv="$(lsr_path tox_venv)"
+if [[ -d "$tox_venv/bin" ]]; then
+  emit_pass "tox-lsr venv"          "$tox_venv"
 else
   emit_warn "tox-lsr venv"          "missing — bootstrap-runner will create on next run"
 fi
@@ -78,7 +82,7 @@ if [[ -L projects/lsr-agent ]]; then
 fi
 
 # 7. QEMU images per target (uses config globs if available)
-iso_dir="$HOME/iso"
+iso_dir="$(lsr_path iso_dir)"
 glob_match() {
   for f in $iso_dir/$1; do
     [[ -f "$f" ]] && { echo "$(basename "$f")"; return 0; }

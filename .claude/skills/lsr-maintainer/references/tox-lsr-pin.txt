@@ -1,7 +1,7 @@
 # Pinned tox-lsr install reference.
 #
 # This file declares the canonical install line for tox-lsr that the
-# bootstrap-runner uses to create the venv at ~/github/ansible/testing/tox-lsr-venv/.
+# bootstrap-runner uses to create the venv at <paths.tox_venv> (default <workspace>/var/venv/tox-lsr/).
 #
 # Format: a single pip-compatible install spec on one non-comment line.
 #

@@ -56,7 +56,7 @@ Each managed project (`lsr-agent`, `obs-package-skill`, `osc-mcp`) is its own re
 This avoids two anti-patterns:
 
 - **Monolith** that copies the skill code in and loses the bidirectional flow with the source repo.
-- **Loose coordination** across `~/github/<various>/` where there's no single command to operate the system.
+- **Loose coordination** across scattered `~/github/<various>/` directories where there's no single command to operate the system. (The workspace's own runtime data — clones, ISOs, worktrees, venv — now lives self-contained in `./var/` for the same reason: one tree, one wipe-with-`rm -rf`.)
 
 ## Smart sub-agent routing
 

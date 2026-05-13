@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 from typing import Any
 
-CONFIG_VERSION = 1
+CONFIG_VERSION = 2  # v2: paths use {workspace} placeholder; adds log_dir/cache_dir.
 
 
 def default_config() -> dict[str, Any]:
@@ -58,14 +58,21 @@ def default_config() -> dict[str, Any]:
             "package_name": "ansible-linux-system-roles",
             "api_url": "https://api.opensuse.org",
         },
+        # Runtime paths. `{workspace}` placeholder is substituted at resolution
+        # time by get_path() so the workspace is self-contained — everything
+        # lives under <workspace>/var/. Operators can override any value to an
+        # absolute path (e.g. /mnt/big/iso) and that override is preserved
+        # across re-runs of setup.sh.
         "paths": {
-            "iso_dir": "~/iso",
-            "ansible_root": "~/github/ansible",
-            "lsr_clones_root": "~/github/linux-system-roles",
-            "worktrees_root": "~/github/.lsr-maintainer-worktrees",
-            "tox_venv": "~/github/ansible/testing/tox-lsr-venv",
-            "host_scripts": "~/github/ansible/scripts",
-            "obs_checkout_root": "~/github/ansible",
+            "iso_dir":           "{workspace}/var/iso",
+            "ansible_root":      "{workspace}/var/ansible",
+            "lsr_clones_root":   "{workspace}/var/clones",
+            "worktrees_root":    "{workspace}/var/worktrees",
+            "tox_venv":          "{workspace}/var/venv/tox-lsr",
+            "host_scripts":      "{workspace}/var/ansible/scripts",
+            "obs_checkout_root": "{workspace}/var/ansible",
+            "log_dir":           "{workspace}/var/log",
+            "cache_dir":         "{workspace}/var/cache",
         },
         "test_targets": {
             "default_set": ["sle-16", "leap-16.0", "sle-15-sp7", "leap-15.6"],
@@ -152,9 +159,50 @@ def _merge_defaults(data: dict, defaults: dict) -> None:
             _merge_defaults(data[k], v)
 
 
+# Old (pre-self-contained) defaults. _migrate() rewrites these to the new
+# {workspace}-relative defaults so existing installs upgrade transparently.
+# User-customized paths (anything not in this map) are left alone.
+_LEGACY_PATH_DEFAULTS = {
+    "iso_dir":           "~/iso",
+    "ansible_root":      "~/github/ansible",
+    "lsr_clones_root":   "~/github/linux-system-roles",
+    "worktrees_root":    "~/github/.lsr-maintainer-worktrees",
+    "tox_venv":          "~/github/ansible/testing/tox-lsr-venv",
+    "host_scripts":      "~/github/ansible/scripts",
+    "obs_checkout_root": "~/github/ansible",
+}
+
+
 def _migrate(data: dict[str, Any]) -> dict[str, Any]:
     data["version"] = CONFIG_VERSION
+    # Self-containment migration: if a path still matches its legacy default,
+    # rewrite it to the new {workspace}-relative default. Customized values
+    # (anything that doesn't match the legacy literal) are preserved.
+    paths = data.get("paths", {})
+    new_defaults = default_config()["paths"]
+    for key, legacy_value in _LEGACY_PATH_DEFAULTS.items():
+        if paths.get(key) == legacy_value:
+            paths[key] = new_defaults[key]
     return data
+
+
+def workspace_root() -> str:
+    """Workspace is the parent of the orchestrator/ directory that holds this file."""
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def get_path(cfg: dict[str, Any], key: str, workspace: str | None = None) -> str:
+    """Resolve cfg['paths'][key] to an absolute path.
+
+    Substitutes the `{workspace}` placeholder, expands `~`, and returns the
+    result. Returns "" if the key is missing or empty (hooks treat empty as
+    "not configured" and fall back to safe defaults).
+    """
+    ws = workspace or workspace_root()
+    raw = cfg.get("paths", {}).get(key, "")
+    if not raw:
+        return ""
+    return os.path.expanduser(raw.format(workspace=ws))
 
 
 def save_config(path: str, data: dict[str, Any]) -> None:
@@ -363,5 +411,42 @@ if __name__ == "__main__":
     c3["github"]["user"] = ""
     c5 = init_from_identity(different, c3)
     assert c5["github"]["user"] == "bob", "init must fill empty github.user from new detection"
+
+    # === Self-containment path resolution ===
+    # Default paths resolve under workspace_root().
+    ws = workspace_root()
+    iso = get_path(default_config(), "iso_dir")
+    assert iso == os.path.join(ws, "var/iso"), f"unexpected iso_dir: {iso}"
+    assert get_path(default_config(), "log_dir").endswith("/var/log")
+    assert get_path(default_config(), "cache_dir").endswith("/var/cache")
+
+    # Explicit workspace override.
+    iso2 = get_path(default_config(), "iso_dir", workspace="/tmp/ws")
+    assert iso2 == "/tmp/ws/var/iso", iso2
+
+    # Absolute override is preserved (no placeholder, no expanduser noise).
+    custom = default_config()
+    custom["paths"]["iso_dir"] = "/mnt/big/iso"
+    assert get_path(custom, "iso_dir") == "/mnt/big/iso"
+
+    # Missing key returns "".
+    assert get_path(default_config(), "nonexistent") == ""
+
+    # === Migration of legacy paths ===
+    legacy = {
+        "version": 1,
+        "paths": {
+            "iso_dir": "~/iso",
+            "ansible_root": "~/github/ansible",
+            "tox_venv": "/custom/override/venv",  # user-customized; must NOT migrate
+        },
+    }
+    legacy_path = os.path.join(tmpdir, "legacy.json")
+    with open(legacy_path, "w") as f:
+        json.dump(legacy, f)
+    migrated = load_config(legacy_path)
+    assert migrated["paths"]["iso_dir"] == "{workspace}/var/iso", migrated["paths"]["iso_dir"]
+    assert migrated["paths"]["ansible_root"] == "{workspace}/var/ansible"
+    assert migrated["paths"]["tox_venv"] == "/custom/override/venv", "custom override must be preserved"
 
     print("OK", p)

@@ -27,7 +27,7 @@ Skill(skill="obs-package-skill", args="work on ansible-linux-system-roles
    │
    ▼
 obs-package-skill phase 0–4 loop:
-   Phase 0: load ~/.claude/obs-packages/context/ansible-linux-system-roles.md
+   Phase 0: load ./var/cache/obs-packages/context/ansible-linux-system-roles.md
    Phase 1: identify changes (version bump? BuildRequires? patch refresh?)
    Phase 2: local pre-flight (osc build locally if possible)
    Phase 3: commit → osc build → diagnose → fix (cap 5 iterations)
@@ -48,7 +48,7 @@ From `projects/obs-package-skill/SKILL.md`:
 - 12+ failure patterns mapped to fixes (missing deps, patch fuzz, file list mismatches, wrong Python build system, etc.)
 - SUSE ecosystem awareness (dep name mapping, spec validation, changelog generation)
 - Iterative `commit → build → diagnose → fix` with cap on iterations
-- Per-package context at `~/.claude/obs-packages/context/<package>.md`
+- Per-package context at `./var/cache/obs-packages/context/<package>.md` (workspace-local)
 
 We don't duplicate any of that — we delegate.
 

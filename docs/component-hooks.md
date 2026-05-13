@@ -40,7 +40,7 @@ Allows (via the explicit allow list and bypassing the deny patterns):
 
 Exit 2 + JSON on stdout: `{"decision":"deny","reason":"..."}`. Claude Code surfaces the reason to the model so it knows to re-route to PENDING_REVIEW.md instead.
 
-Every block is logged to `~/.cache/lsr-maintainer/security.log` with timestamp, reason, and the full attempted command.
+Every block is logged to `./var/log/security.log` with timestamp, reason, and the full attempted command.
 
 ## `block-credential-leak.sh` — PreToolUse on Bash + Read
 

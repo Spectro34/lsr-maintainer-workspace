@@ -46,8 +46,8 @@ Each project in `projects/` is its own repo with its own commits, remotes, and C
 ### `projects/ansible-host-scripts/` — not yet wired
 
 - **Planned mechanism**: submodule pointing at a new `${github_user}/lsr-host-scripts` repo.
-- **What it would provide**: `lsr-test.sh`, `run-all-tests.sh`, `retest-failing.sh`, `patch-tox-lsr.sh`, `cleanup-suseconnect.yml` — currently living at `~/github/ansible/scripts/`.
-- **Until then**: bootstrap-runner symlinks the existing files from `~/github/ansible/scripts/` into the expected positions.
+- **What it would provide**: `lsr-test.sh`, `run-all-tests.sh`, `retest-failing.sh`, `patch-tox-lsr.sh`, `cleanup-suseconnect.yml` — currently expected at `<paths.host_scripts>/` (default `./var/ansible/scripts/`).
+- **Until then**: bootstrap-runner populates `<paths.host_scripts>/` (cloning the eventual repo, or symlinking from a pre-existing checkout the operator has on the host).
 
 ## Workspace ops across all projects
 

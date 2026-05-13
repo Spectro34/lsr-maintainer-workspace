@@ -58,7 +58,7 @@ state cursor updated; queue item removed; LSR_PROGRESS.md appended
 - Commit on fork branch: `${github_user}/<role>@fix/suse-support` (force-pushes blocked by hook)
 - State update: cursor advanced, queue item removed
 - `state/PENDING_REVIEW.md` entry under "👀 Upstream review needs your eyes" with auto-fix status
-- Audit trail: full transcript at `~/.cache/lsr-maintainer/<ts>.jsonl`
+- Audit trail: full transcript at `./var/log/<ts>.jsonl`
 
 ## Boundaries
 

@@ -28,13 +28,15 @@ The workspace is **identity-agnostic** until `./bin/setup.sh` runs. After init, 
     "api_url":                 "https://api.opensuse.org"
   },
   "paths": {
-    "iso_dir":           "~/iso",
-    "ansible_root":      "~/github/ansible",
-    "lsr_clones_root":   "~/github/linux-system-roles",
-    "worktrees_root":    "~/github/.lsr-maintainer-worktrees",
-    "tox_venv":          "~/github/ansible/testing/tox-lsr-venv",
-    "host_scripts":      "~/github/ansible/scripts",
-    "obs_checkout_root": "~/github/ansible"
+    "iso_dir":           "{workspace}/var/iso",
+    "ansible_root":      "{workspace}/var/ansible",
+    "lsr_clones_root":   "{workspace}/var/clones",
+    "worktrees_root":    "{workspace}/var/worktrees",
+    "tox_venv":          "{workspace}/var/venv/tox-lsr",
+    "host_scripts":      "{workspace}/var/ansible/scripts",
+    "obs_checkout_root": "{workspace}/var/ansible",
+    "log_dir":           "{workspace}/var/log",
+    "cache_dir":         "{workspace}/var/cache"
   },
   "test_targets": {
     "default_set":            ["sle-16", "leap-16.0", "sle-15-sp7", "leap-15.6"],
@@ -65,7 +67,9 @@ Most of the defaults are sensible, but these are the typical overrides:
 | `obs.source_project` | Default `devel:sap:ansible`. Change if you maintain the package in a different devel project. |
 | `obs.package_name` | Default `ansible-linux-system-roles`. |
 | `schedule.cron_time` | Default `7 3 * * *` (03:07 local). `install-cron.sh` reads this if present. |
-| `paths.iso_dir` | Default `~/iso`. Change if QEMU images live elsewhere. |
+| `paths.iso_dir` | Default `{workspace}/var/iso`. Change if QEMU images live elsewhere (e.g. `/mnt/big/iso`). |
+| `paths.log_dir` | Default `{workspace}/var/log`. Hooks write `security.log` and the cron entry writes `<timestamp>.jsonl` transcripts here. |
+| `paths.cache_dir` | Default `{workspace}/var/cache`. Per-package context for `obs-package-skill` (`obs-packages/context/<pkg>.md`) lives under here. |
 | `test_targets.fallback` | Map target → fallback target when image is missing. Default `{sle-16: leap-16.0}`. |
 | `test_targets.auto_download.leap-16.0` | URL and size_mb for auto-fetch. Set to `null` to disable. |
 | `review_board.max_concern_iterations` | Default 2. How many re-iterations a `bug-fix-implementer` patch may go through before falling out to manual triage. |
@@ -95,6 +99,20 @@ Config is gitignored (in `state/`). Different machines running the same workspac
 - A laptop config with `auto_download_leap = false` (metered network).
 - A workstation config with a different `source_project`.
 - A CI runner config with extra `community_orgs` for testing.
+
+## Path resolution: the `{workspace}` placeholder
+
+Every value under `paths.*` may contain the literal substring `{workspace}` — `orchestrator.config.get_path(cfg, key)` substitutes it with the workspace root (the parent dir of `orchestrator/`). It also calls `expanduser`, so `~/`-relative paths work too. Absolute paths (e.g. `/mnt/big/iso`) pass through untouched.
+
+```python
+from orchestrator.config import load_config, get_path
+cfg = load_config("state/config.json")
+get_path(cfg, "iso_dir")    # → "/home/alice/github/lsr-maintainer-workspace/var/iso"
+```
+
+Shell side: `source bin/_lib/paths.sh` then `lsr_path iso_dir`. The same resolver is used everywhere — config defaults, scripts, hooks, and skill MD agents all agree on the same canonical paths.
+
+**Migration:** `_migrate()` upgrades v1 configs (which had `~/iso`, `~/github/ansible/...` literals) to the v2 `{workspace}` placeholders, but ONLY for values that still match the legacy defaults. Custom overrides are preserved verbatim.
 
 ## Reading config from hooks (bash)
 

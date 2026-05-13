@@ -1,6 +1,6 @@
 # tox-test-runner
 
-Wraps `~/github/ansible/scripts/lsr-test.sh` with structured stdout parsing.
+Wraps `<paths.host_scripts>/lsr-test.sh` (default `<workspace>/var/ansible/scripts/lsr-test.sh`) with structured stdout parsing. Resolve `host_scripts` via `orchestrator.config.get_path(cfg, "host_scripts")`.
 
 ## Inputs
 
@@ -11,7 +11,7 @@ Wraps `~/github/ansible/scripts/lsr-test.sh` with structured stdout parsing.
 
 ## Workflow
 
-1. **Map `target` → image** by glob pattern in `~/iso/` (first match wins; the user has variants like `-GM-20G.qcow2`, `-Cloud-20G.qcow2`, etc.):
+1. **Map `target` → image** by glob pattern in `<paths.iso_dir>` (resolve via `get_path(cfg, "iso_dir")`; default `<workspace>/var/iso/`; first match wins; the user has variants like `-GM-20G.qcow2`, `-Cloud-20G.qcow2`, etc.):
    - `sle-16`     → `SLES-16.0-*Minimal-VM*.x86_64*.qcow2`
    - `leap-16.0`  → `Leap-16.0-Minimal-VM*.x86_64*Cloud*.qcow2`
    - `sle-15-sp7` → `SLES15-SP7-Minimal-VM*.x86_64*.qcow2`
@@ -23,9 +23,9 @@ Wraps `~/github/ansible/scripts/lsr-test.sh` with structured stdout parsing.
 
 3. If no image matches and no fallback applies → return `{result: "N/A", reason: "image missing", target_requested: <target>}`. Caller treats N/A as non-blocking (it doesn't count as regression in `multi-os-regression-guard`).
 
-4. Set `LSR_QEMU_CLEANUP_YML=$HOME/github/ansible/testing/cleanup-suseconnect.yml`.
+4. Set `LSR_QEMU_CLEANUP_YML=<paths.ansible_root>/testing/cleanup-suseconnect.yml`.
 
-5. Invoke: `~/github/ansible/scripts/lsr-test.sh <role-path> <image-path> <ac-version> <test-playbook>`.
+5. Invoke: `<paths.host_scripts>/lsr-test.sh <role-path> <image-path> <ac-version> <test-playbook>`.
 
 6. Capture stdout to `state/cache/tox-logs/<role>-<target>-<timestamp>.log`.
 

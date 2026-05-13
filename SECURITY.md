@@ -38,7 +38,7 @@ The agent can write to:
 - Local git worktrees under `state/worktrees/` (sandboxed).
 - Your fork branches (`${github_user}/<role>` on branches matching `fix/*`).
 - OBS personal branches (`${obs_user_root}:branches:*`).
-- Local files in this workspace's `state/`, `state/cache/`, and `~/.cache/lsr-maintainer/`.
+- Local files in this workspace's `state/`, `state/cache/`, and `./var/` (logs, role clones, worktrees, ISO cache, tox venv).
 
 The agent **cannot**:
 
@@ -70,9 +70,17 @@ The `block-upstream-actions.sh` hook re-parses each Bash command (handles `;`, `
 
 ## Audit trail
 
-Every scheduled run writes a full transcript to `~/.cache/lsr-maintainer/<timestamp>.jsonl` (stream-json format). This includes every tool call, every sub-agent invocation, and every hook decision. Use it for postmortem.
+Every scheduled run writes a full transcript to `./var/log/<timestamp>.jsonl` (stream-json format; path resolves from `paths.log_dir` in `state/config.json`). This includes every tool call, every sub-agent invocation, and every hook decision. Use it for postmortem.
 
-Hook-block events also append to `~/.cache/lsr-maintainer/security.log` with the attempted command and the reason it was blocked.
+Hook-block events also append to `./var/log/security.log` with the attempted command and the reason it was blocked.
+
+**Tradeoff to know about**: the audit log lives inside the workspace tree. `rm -rf var/` erases the forensic record along with everything else. If you want the audit trail to outlive a workspace wipe, symlink `var/log` to a location outside the workspace before the first hook fires:
+
+```bash
+mkdir -p /var/log/lsr-maintainer && ln -s /var/log/lsr-maintainer var/log
+```
+
+Mirror copy: each hook also pipes its decision to `systemd-cat -t lsr-maintainer-security`, so the journal entry survives even if the local log is wiped.
 
 ## Revocation
 
@@ -86,4 +94,4 @@ Hook-block events also append to `~/.cache/lsr-maintainer/security.log` with the
 | Nuke local state | `make distclean` (state, worktrees, tox venv — keeps source) |
 | Full uninstall | `make uninstall && rm -rf ~/path/to/lsr-maintainer-workspace` |
 
-**Recommended halt flow when something feels wrong**: `touch state/.halt && echo "investigating $(date -Iseconds)" > state/.halt`. This makes the next cron tick exit without spawning `claude` while preserving all logs/state for forensics. Examine `~/.cache/lsr-maintainer/security.log` for blocked actions; resume only after the cause is understood.
+**Recommended halt flow when something feels wrong**: `touch state/.halt && echo "investigating $(date -Iseconds)" > state/.halt`. This makes the next cron tick exit without spawning `claude` while preserving all logs/state for forensics. Examine `./var/log/security.log` for blocked actions; resume only after the cause is understood.

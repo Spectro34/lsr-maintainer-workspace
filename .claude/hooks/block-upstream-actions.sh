@@ -32,7 +32,7 @@ if [ -f "$CONFIG_JSON" ] && command -v jq >/dev/null 2>&1; then
   ALLOW_OSC_PREFIX="$(jq -r '.obs.personal_project_root // ""' "$CONFIG_JSON" 2>/dev/null)"
 fi
 
-SECURITY_LOG="${HOME}/.cache/lsr-maintainer/security.log"
+SECURITY_LOG="${WORKSPACE_ROOT}/var/log/security.log"
 mkdir -p "$(dirname "$SECURITY_LOG")" 2>/dev/null || true
 
 # ------------------------------------------------------------------- helpers

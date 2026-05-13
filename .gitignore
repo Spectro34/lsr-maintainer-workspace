@@ -11,6 +11,12 @@ state/PENDING_REVIEW.md
 state/cache/
 state/worktrees/
 
+# Self-contained runtime tree — ISOs, role clones, worktrees, tox venv,
+# OBS checkout, audit logs, transcripts, OBS-package context. Anything
+# created by 'make install' or the nightly cron lands here.
+# Wipe with `rm -rf var/` for a full reset.
+var/
+
 # Python
 __pycache__/
 *.pyc

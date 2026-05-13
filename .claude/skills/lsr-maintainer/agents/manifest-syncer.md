@@ -4,7 +4,7 @@ Read-only sub-agent. Parses the `ansible-linux-system-roles.spec` to extract the
 
 ## Inputs
 
-- Path to a checked-out OBS package, e.g., `~/github/ansible/devel:sap:ansible/ansible-linux-system-roles/ansible-linux-system-roles.spec`
+- Path to a checked-out OBS package, e.g., `<paths.obs_checkout_root>/devel:sap:ansible/ansible-linux-system-roles/ansible-linux-system-roles.spec` (resolve `obs_checkout_root` via `get_path(cfg, "obs_checkout_root")`; default `<workspace>/var/ansible/`).
 - If not present, runs `osc co devel:sap:ansible ansible-linux-system-roles` into `state/cache/obs-checkout/` first (read-only osc op).
 
 ## Workflow

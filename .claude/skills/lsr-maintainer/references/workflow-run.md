@@ -95,7 +95,7 @@ Read-only checks. Abort early if anything critical is broken:
 1. `state/.lsr-maintainer-state.json` loads (else default_state()).
 2. `gh auth status` succeeds.
 3. `osc whois` succeeds.
-4. tox-lsr venv exists at `~/github/ansible/testing/tox-lsr-venv/`.
+4. tox-lsr venv exists at `<paths.tox_venv>` (default `<workspace>/var/venv/tox-lsr/`).
 5. `git config --global user.email` and `user.name` are set.
 6. `projects/lsr-agent/` symlink resolves.
 
@@ -261,7 +261,7 @@ if config["anomaly"]["enabled"]:
                 f.write(anomaly_block)
 ```
 
-The orchestrator captures `tokens_input`/`tokens_output` from the stream-json transcript that wraps this run (`bin/lsr-maintainer-run.sh` writes it to `~/.cache/lsr-maintainer/<ts>.jsonl`). For run-time-only metrics (commits_pushed etc.), the orchestrator counts them as it goes and stuffs them into a local dict.
+The orchestrator captures `tokens_input`/`tokens_output` from the stream-json transcript that wraps this run (`bin/lsr-maintainer-run.sh` writes it to `<paths.log_dir>/<ts>.jsonl`, default `<workspace>/var/log/`). For run-time-only metrics (commits_pushed etc.), the orchestrator counts them as it goes and stuffs them into a local dict.
 
 ### 4b — Other notifications
 

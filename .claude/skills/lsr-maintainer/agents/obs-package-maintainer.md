@@ -11,7 +11,7 @@ Thin wrapper that invokes the vendored `obs-package-skill` to maintain the `ansi
 ## Workflow
 
 1. `Skill(skill="obs-package-skill", args="work on <package> in <obs_project>")` — the obs-package-skill drives its phase 0–4 loop autonomously:
-   - Phase 0: load package context from `~/.claude/obs-packages/context/<package>.md`
+   - Phase 0: load package context from `<paths.cache_dir>/obs-packages/context/<package>.md` (resolve via `get_path(cfg, "cache_dir")`; default `<workspace>/var/cache/`)
    - Phase 1: identify changes needed (version bump? patch refresh? new BuildRequires?)
    - Phase 2: local pre-flight (osc build locally if possible)
    - Phase 3: commit → osc build → diagnose failure → fix loop (cap: 5 iterations)

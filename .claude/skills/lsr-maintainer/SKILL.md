@@ -40,8 +40,8 @@ The autonomous nightly path. The full workflow lives in `references/workflow-run
 
 ### `/lsr-maintainer doctor`
 Read-only posture check. Returns a green/red table:
-- tox-lsr venv at `~/github/ansible/testing/tox-lsr-venv/`
-- QEMU images at `~/iso/` (per target)
+- tox-lsr venv at `paths.tox_venv` (default `<workspace>/var/venv/tox-lsr/`)
+- QEMU images at `paths.iso_dir` (default `<workspace>/var/iso/`, per target)
 - `gh auth status` (no token printed)
 - `osc whois` (no password used)
 - Cron entry registered
@@ -164,7 +164,7 @@ When you spawn a sub-agent, read its `.md` first and include the full instructio
 - **State**: `state/.lsr-maintainer-state.json` — see `orchestrator/state_schema.py`. Atomic writes. Schema versioned.
 - **PENDING_REVIEW.md**: `state/PENDING_REVIEW.md` — rewritten from state every run. The one file the user reads each morning. Sections: 🚀 Ready to ship, 👀 Upstream review needs your eyes, 🏗 OBS package status, 🆕 New role ready to ship, 🌊 Upstream drift, 🩺 Bootstrap status.
 - **Session log**: append to `projects/lsr-agent/LSR_PROGRESS.md` (existing convention, append-only).
-- **Audit trail**: every run's full transcript at `~/.cache/lsr-maintainer/<timestamp>.jsonl` (handled by `bin/lsr-maintainer-run.sh`).
+- **Audit trail**: every run's full transcript at `<paths.log_dir>/<timestamp>.jsonl` (default `<workspace>/var/log/`; handled by `bin/lsr-maintainer-run.sh`).
 
 ---
 

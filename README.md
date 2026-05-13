@@ -45,6 +45,8 @@ bash bin/doctor.sh                   # fast green/red posture check (no claude -
 make dry-run                         # see what tonight would do, change nothing
 ```
 
+All runtime data — QEMU images, role clones, tox venv, OBS checkout, worktrees, audit logs — lives in `./var/` inside this workspace. `rm -rf var/` is a full reset; `make distclean` wipes it for you. The only external dependency is the `projects/lsr-agent` symlink (see step 0); everything else stays inside the workspace tree.
+
 See [SETUP.md](SETUP.md) for prerequisites (system packages, GitHub account, OBS membership, QEMU images).
 
 ## Daily usage
