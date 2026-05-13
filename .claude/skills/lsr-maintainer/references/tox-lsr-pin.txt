@@ -7,5 +7,12 @@
 #
 # Why pinned: tox-lsr can break between releases when a new ansible-core or
 # new QEMU image format ships. Pinning lets us upgrade deliberately.
+#
+# NOTE: tox-lsr is NOT published on PyPI — it installs from the upstream
+# GitHub repo. The commit hash below was the version validated on the
+# operator's working venv at ~/github/ansible/testing/tox-lsr-venv/ (3.14.0,
+# main branch). Bump by editing the commit hash to the latest tested SHA.
+# To find the latest:
+#   git ls-remote https://github.com/linux-system-roles/tox-lsr refs/heads/main
 
-tox-lsr==3.5.0
+git+https://github.com/linux-system-roles/tox-lsr@565e2063bcbdac59e0e6b198177489577d6acd57

@@ -18,6 +18,15 @@ state/worktrees/
 # Wipe with `rm -rf var/` for a full reset.
 var/
 
+# Belt-and-suspenders: defense against accidental commits of vault
+# passwords or unencrypted SCC creds even if someone moves them outside
+# var/. The 'make scc-vault-init' flow already puts these under var/.
+.vault_pwd
+**/.vault_pwd
+vault-suseconnect.yml
+**/vault-suseconnect.yml
+!assets/playbooks/vault-suseconnect.yml.example
+
 # Python
 __pycache__/
 *.pyc

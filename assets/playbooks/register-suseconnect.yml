@@ -1,0 +1,58 @@
+---
+# register-suseconnect.yml — SLE pre-test registration via SCC.
+#
+# Runs on the SLE VM before tox-lsr starts the role tests. The cleanup
+# playbook (cleanup-suseconnect.yml) deregisters afterwards.
+#
+# Secrets policy: SCC reg_code and email are stored ENCRYPTED in
+# vault-suseconnect.yml. Never put plaintext SCC creds in this file.
+#
+# Usage from a test wrapper:
+#   ansible-playbook -i <inv> register-suseconnect.yml \
+#     --vault-password-file <pwd-file>
+#
+# Skip cleanly on non-SLE targets (Leap doesn't need SCC).
+
+- name: Register SLE system with SUSEConnect
+  hosts: all
+  gather_facts: true
+  vars_files:
+    - vault-suseconnect.yml
+  tasks:
+    - name: Detect distro (skip register on non-SLE)
+      ansible.builtin.set_fact:
+        is_sle: "{{ ansible_facts.distribution == 'SLES' or ansible_facts.distribution == 'SLES_SAP' }}"
+
+    - name: Skip registration on non-SLE targets
+      ansible.builtin.debug:
+        msg: "Distribution={{ ansible_facts.distribution }} — skipping SCC registration (Leap/openSUSE doesn't need it)."
+      when: not is_sle
+
+    - name: Check current SCC registration status
+      ansible.builtin.command: SUSEConnect --status-text
+      register: scc_status
+      changed_when: false
+      failed_when: false
+      when: is_sle
+
+    - name: Register with SCC (only if not already registered)
+      ansible.builtin.command:
+        cmd: "SUSEConnect -r {{ scc_regcode }} -e {{ scc_email }}"
+      register: scc_register
+      when:
+        - is_sle
+        - "'Registered' not in (scc_status.stdout | default(''))"
+      no_log: true   # never log the regcode/email to stdout or transcripts
+
+    - name: Verify registration succeeded
+      ansible.builtin.command: SUSEConnect --status-text
+      register: scc_verify
+      changed_when: false
+      when: is_sle
+
+    - name: Show non-secret registration summary
+      ansible.builtin.debug:
+        msg: >
+          SCC posture on {{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }}:
+          {{ scc_verify.stdout_lines | default(['unknown']) | join('; ') }}
+      when: is_sle

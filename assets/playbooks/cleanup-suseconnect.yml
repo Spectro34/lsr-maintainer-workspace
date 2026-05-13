@@ -1,0 +1,26 @@
+---
+# cleanup-suseconnect.yml — post-test deregistration.
+#
+# Pointed at by lsr-test.sh via LSR_QEMU_CLEANUP_YML. tox-lsr runs this
+# on the VM after every test so the SCC entitlement is released and the
+# next test on the next VM gets a clean state.
+#
+# No secrets needed — `SUSEConnect -d` doesn't require a reg-code.
+# This playbook is safe to run on non-SLE targets (it's a no-op).
+
+- name: Deregister SUSEConnect
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Skip on non-SLE targets
+      ansible.builtin.debug:
+        msg: "Distribution={{ ansible_facts.distribution }} — nothing to deregister."
+      when: ansible_facts.distribution not in ['SLES', 'SLES_SAP']
+
+    - name: Deregister system from SCC
+      ansible.builtin.command: SUSEConnect -d
+      register: dereg_result
+      changed_when: "'Deregistered' in (dereg_result.stdout | default(''))"
+      failed_when: false
+      ignore_errors: true
+      when: ansible_facts.distribution in ['SLES', 'SLES_SAP']

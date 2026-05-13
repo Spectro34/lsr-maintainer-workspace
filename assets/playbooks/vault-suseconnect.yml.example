@@ -1,0 +1,17 @@
+# vault-suseconnect.yml.example — TEMPLATE for the SCC credentials vault.
+#
+# This is the UNENCRYPTED template. Copy it to vault-suseconnect.yml,
+# fill in real values, then encrypt with ansible-vault. NEVER commit
+# the plaintext or the encrypted file (see assets/playbooks/README.md).
+#
+# Usage:
+#   cp vault-suseconnect.yml.example vault-suseconnect.yml
+#   $EDITOR vault-suseconnect.yml         # fill in real reg-code + email
+#   ansible-vault encrypt vault-suseconnect.yml --vault-password-file .vault_pwd
+#
+# Or in one shot via `make scc-vault-edit` (see Makefile).
+#
+# Variables required by register-suseconnect.yml:
+
+scc_regcode: REPLACE_WITH_YOUR_SCC_REGISTRATION_CODE
+scc_email: REPLACE_WITH_YOUR_EMAIL_FOR_SCC

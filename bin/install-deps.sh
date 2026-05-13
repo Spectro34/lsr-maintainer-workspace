@@ -61,21 +61,32 @@ fi
 # can't run, which means the agent will skip pushing fixes. Better to fail
 # loudly here than silently degrade the agent to "advisory only" mode.
 TOX_VENV="$(lsr_path tox_venv)"
-if [[ -d "$TOX_VENV/bin" ]]; then
-  ok "tox-lsr venv exists at $TOX_VENV"
+PIN_FILE="$WORKSPACE/.claude/skills/lsr-maintainer/references/tox-lsr-pin.txt"
+PIN_SPEC="$(grep -Ev '^[[:space:]]*(#|$)' "$PIN_FILE" 2>/dev/null | head -1)"
+[[ -z "$PIN_SPEC" ]] && PIN_SPEC="tox-lsr"
+# Stricter readiness check: the venv counts as ready ONLY if tox-lsr is
+# actually importable (a half-built venv with python3 -m venv succeeded but
+# pip install failed otherwise looks fine and silently degrades the agent).
+venv_has_tox_lsr() {
+  [[ -x "$TOX_VENV/bin/python" ]] && "$TOX_VENV/bin/python" -c 'import tox_lsr' 2>/dev/null
+}
+if venv_has_tox_lsr; then
+  ok "tox-lsr venv ready at $TOX_VENV ($("$TOX_VENV/bin/pip" show tox-lsr 2>/dev/null | awk '/^Version:/ {print $2}'))"
 else
-  warn "tox-lsr venv missing — creating now..."
-  PIN_FILE="$WORKSPACE/.claude/skills/lsr-maintainer/references/tox-lsr-pin.txt"
-  PIN_SPEC="$(grep -Ev '^[[:space:]]*(#|$)' "$PIN_FILE" 2>/dev/null | head -1)"
-  [[ -z "$PIN_SPEC" ]] && PIN_SPEC="tox-lsr"
-  mkdir -p "$(dirname "$TOX_VENV")"
-  if python3 -m venv "$TOX_VENV" 2>/dev/null \
+  if [[ -d "$TOX_VENV/bin" ]]; then
+    warn "tox-lsr venv exists at $TOX_VENV but tox-lsr is not installed — installing..."
+  else
+    warn "tox-lsr venv missing — creating now..."
+    mkdir -p "$(dirname "$TOX_VENV")"
+    python3 -m venv "$TOX_VENV" 2>/dev/null || true
+  fi
+  if [[ -x "$TOX_VENV/bin/pip" ]] \
      && "$TOX_VENV/bin/pip" install --quiet --upgrade pip \
      && "$TOX_VENV/bin/pip" install --quiet "$PIN_SPEC"; then
-    ok "tox-lsr venv created at $TOX_VENV (installed: $PIN_SPEC)"
+    ok "tox-lsr installed in $TOX_VENV (spec: $PIN_SPEC)"
   else
-    warn "tox-lsr venv creation failed — bootstrap-runner will retry on next 'make run'."
-    warn "Manual: python3 -m venv $TOX_VENV && $TOX_VENV/bin/pip install $PIN_SPEC"
+    warn "tox-lsr install failed — bootstrap-runner will retry on next 'make run'."
+    warn "Manual: $TOX_VENV/bin/pip install $PIN_SPEC"
   fi
 fi
 
@@ -129,6 +140,34 @@ if ! has_image_for "SLES-16.0-*Minimal-VM*.x86_64*.qcow2"; then
   else
     warn "SLE 16 image absent AND Leap 16 fallback unavailable — sle16-target tests cannot run"
   fi
+fi
+
+# --- 4c. SCC register/cleanup playbooks (drop into var/ansible/testing/) ---
+# Source-of-truth lives in assets/playbooks/ (tracked). Copy with -n (no-clobber)
+# so local edits in var/ansible/testing/ survive re-runs. See
+# assets/playbooks/README.md for the vault setup flow.
+TESTING_DIR="$ANSIBLE_ROOT/testing"
+mkdir -p "$TESTING_DIR"
+for pb in register-suseconnect.yml cleanup-suseconnect.yml vault-suseconnect.yml.example; do
+  src="$WORKSPACE/assets/playbooks/$pb"
+  dst="$TESTING_DIR/$pb"
+  if [[ -f "$src" ]]; then
+    if [[ -f "$dst" ]]; then
+      ok "playbook present (preserving local edits): $dst"
+    else
+      cp "$src" "$dst" && ok "installed playbook: $dst"
+    fi
+  fi
+done
+if [[ -f "$TESTING_DIR/vault-suseconnect.yml" ]]; then
+  if head -1 "$TESTING_DIR/vault-suseconnect.yml" 2>/dev/null | grep -q '^\$ANSIBLE_VAULT'; then
+    ok "vault-suseconnect.yml present and encrypted"
+  else
+    warn "vault-suseconnect.yml present but NOT encrypted — run: ansible-vault encrypt $TESTING_DIR/vault-suseconnect.yml"
+  fi
+else
+  warn "vault-suseconnect.yml absent — SCC registration will fail on SLE targets."
+  warn "  See assets/playbooks/README.md for vault setup, or run: make scc-vault-init"
 fi
 
 # --- 5. .gitignore for workspace's own ignored-state ---

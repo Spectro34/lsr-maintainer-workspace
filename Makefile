@@ -101,6 +101,48 @@ ack-host-lock: ## Re-confirm host fingerprint after a workspace move (TTY-only).
 	@python3 -m orchestrator.host_lock --ack state/.lsr-maintainer-state.json
 
 # ---------------------------------------------------------------------------
+# SCC vault — SLE registration credentials (ansible-vault encrypted)
+# ---------------------------------------------------------------------------
+
+VAULT_DIR := var/ansible/testing
+VAULT_PWD := $(VAULT_DIR)/.vault_pwd
+VAULT_FILE := $(VAULT_DIR)/vault-suseconnect.yml
+
+.PHONY: scc-vault-init
+scc-vault-init: ## One-time: create vault password + encrypted SCC creds file. Prompts interactively.
+	@mkdir -p $(VAULT_DIR)
+	@if [ -f $(VAULT_PWD) ]; then echo "Vault password already exists at $(VAULT_PWD); skipping."; \
+	else \
+	  read -s -p "Pick a vault password (long random string): " p && echo "" && \
+	  echo "$$p" > $(VAULT_PWD) && chmod 600 $(VAULT_PWD) && \
+	  echo "OK wrote $(VAULT_PWD) (chmod 600)"; \
+	fi
+	@if [ -f $(VAULT_FILE) ]; then echo "Vault file exists at $(VAULT_FILE); use 'make scc-vault-edit' to modify."; \
+	else \
+	  cp assets/playbooks/vault-suseconnect.yml.example $(VAULT_FILE) && \
+	  ansible-vault encrypt $(VAULT_FILE) --vault-password-file $(VAULT_PWD) && \
+	  echo "OK encrypted $(VAULT_FILE). Edit with 'make scc-vault-edit' to fill in real values."; \
+	fi
+
+.PHONY: scc-vault-edit
+scc-vault-edit: ## Edit the SCC creds vault (decrypts → opens $$EDITOR → re-encrypts on save).
+	@test -f $(VAULT_PWD) || { echo "Run 'make scc-vault-init' first."; exit 1; }
+	@test -f $(VAULT_FILE) || { echo "$(VAULT_FILE) missing — run 'make scc-vault-init'."; exit 1; }
+	@ansible-vault edit $(VAULT_FILE) --vault-password-file $(VAULT_PWD)
+
+.PHONY: scc-vault-view
+scc-vault-view: ## View the decrypted SCC creds (read-only).
+	@test -f $(VAULT_PWD) || { echo "Run 'make scc-vault-init' first."; exit 1; }
+	@ansible-vault view $(VAULT_FILE) --vault-password-file $(VAULT_PWD)
+
+.PHONY: scc-vault-rekey
+scc-vault-rekey: ## Rotate the vault password. Prompts for new one.
+	@test -f $(VAULT_PWD) || { echo "Run 'make scc-vault-init' first."; exit 1; }
+	@ansible-vault rekey $(VAULT_FILE) --vault-password-file $(VAULT_PWD)
+	@echo "Vault re-keyed. Now update $(VAULT_PWD) with the NEW password:"
+	@echo "  read -s -p 'new password: ' p && echo \"\$$p\" > $(VAULT_PWD) && chmod 600 $(VAULT_PWD)"
+
+# ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
