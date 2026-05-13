@@ -31,6 +31,14 @@ EVENT_KINDS = (
     "halt",                # agent auto-engaged kill switch
     "daily_summary",       # nightly run summary
     "host_lock_mismatch",  # config.security.enforce_host_lock tripped
+    # Per-milestone progress notifications (live visibility for manual runs).
+    "run_started",         # `/lsr-maintainer run` just acquired the lock
+    "run_completed",       # full nightly path finished cleanly
+    "commit_pushed",       # bug-fix-implementer pushed to a fork branch
+    "fork_created",        # fork-sync-checker created a new fork
+    "fork_sync_summary",   # batched end-of-Phase-2 fork-sync results
+    "enable_role_complete",  # new-role-enabler returned a verdict
+    "human_action_needed", # PENDING_REVIEW.md gained a manual_triage item
 )
 
 

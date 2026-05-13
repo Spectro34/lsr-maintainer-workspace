@@ -114,6 +114,13 @@ except TimeoutError:
 
 Holding the lock through long phases (60-min new-role enablement, 30-min tox) is the desired behavior: a manual `make run` while cron is running will TimeoutError after 30s. Only one run at a time.
 
+After acquiring the lock, emit a heartbeat:
+
+```python
+from orchestrator.notify import notify
+notify(cfg, "run_started", f"/lsr-maintainer run started at {now_iso}", priority="low")
+```
+
 ## Phase 1 — Pre-flight (doctor)
 
 Read-only checks. Abort early if anything critical is broken:
@@ -152,6 +159,27 @@ This ensures every role in the OBS manifest has a per-role entry in `state.roles
 
 ```
 Agent(prompt=read("agents/fork-sync-checker.md"))
+```
+
+After fork-sync-checker returns, emit per-fork notifications + a batched summary:
+
+```python
+from orchestrator.notify import notify
+metrics = fork_sync_result.get("metrics", {})
+
+# One ping per newly-created fork (typically 0–5/run, capped by fork_sync.max_per_run).
+for role in fork_sync_result.get("forks_created_this_run", []):
+    notify(cfg, "fork_created",
+           f"new fork: {github_user}/{role}", priority="default")
+
+# Batched summary (1x/run).
+n_created = metrics.get("forks_created", 0)
+n_ff       = metrics.get("forks_fast_forwarded", 0)
+n_conflict = metrics.get("conflicts", 0)
+if n_created or n_ff or n_conflict:
+    notify(cfg, "fork_sync_summary",
+           f"forks: {n_created} created, {n_ff} fast-forwarded, {n_conflict} conflicts",
+           priority="low" if n_conflict == 0 else "default")
 ```
 
 Then pop from `config.enablement.queue`:
@@ -239,6 +267,9 @@ Spawn multi-os-regression-guard:
    ↓
 verdict green → git push origin <fork-branch>
    then state.roles[role].pr_cursors[<num>].fix_attempts += 1
+   notify(cfg, "commit_pushed",
+          f"{role}: pushed {commit_sha[:8]} to {github_user}/{role}@{fork_branch}",
+          priority="default")
    verdict regression/infrastructure_gap → revert + PENDING
 ```
 
@@ -275,8 +306,16 @@ On successful enablement (`verdict: "enabled"`), the orchestrator removes the ro
 
 ```python
 from orchestrator.config import ack_enablement_role
+from orchestrator.notify import notify
 if verdict == "enabled":
     ack_enablement_role("state/config.json", role)
+    notify(cfg, "enable_role_complete",
+           f"{role}: enabled for {target}; pushed to {github_user}/{role}",
+           priority="default")
+else:
+    notify(cfg, "enable_role_complete",
+           f"{role}: verdict={verdict} (needs human review)",
+           priority="high")
 ```
 
 Failures leave the role in the queue so the next nightly run retries. Manual override: `make ack-enablement ROLE=<name>` (or edit `state/config.json` directly).
@@ -341,12 +380,20 @@ The orchestrator calls `notify(config, event, message, priority)` for each notab
 
 ```python
 from orchestrator.pending_review_render import render
+from orchestrator.notify import notify
 state["pending_review_count"] = sum(1 for q in state["queue"] if q["priority"] < 9)
 text = render(state, cfg)   # cfg required for the 📋 Enablement queue section
 if anomaly_block:
     text = anomaly_block + "\n" + text   # anomaly always TOP of file
 with open("state/PENDING_REVIEW.md", "w") as f:
     f.write(text)
+
+# Ping if any manual_triage items surfaced this run.
+n_manual = sum(1 for q in state["queue"] if q.get("kind") == "manual_triage")
+if n_manual > 0:
+    notify(cfg, "human_action_needed",
+           f"{n_manual} item(s) in state/PENDING_REVIEW.md need human action",
+           priority="high")
 ```
 
 Append a session block to `state/LSR_PROGRESS.md`:
@@ -385,6 +432,15 @@ except TimeoutError:
 ```
 
 `state_lock` uses `fcntl.LOCK_EX` on `state/.lsr-maintainer-state.json.lock`. `save_state` itself remains atomic (temp file + rename); the lock prevents concurrent read-modify-write from clobbering each other.
+
+After save, emit the heartbeat:
+
+```python
+from orchestrator.notify import notify
+notify(cfg, "run_completed",
+       f"run done. {commits_pushed} pushed, {pending_review_count} pending, ${cost_usd:.2f}",
+       priority="low")
+```
 
 Then remove the pidfile so the next run can acquire:
 

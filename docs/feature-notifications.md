@@ -52,16 +52,40 @@ The body shape:
 
 ## Event kinds
 
+**Critical (always notify by default):**
+
 | Event | Fires when | Priority |
 |---|---|---|
 | `reject` | Review board rejected a patch — needs human triage | default |
 | `anomaly` | Run metric exceeded `mean + 3σ` (cost, duration, etc.) | high |
 | `doctor_red` | Pre-flight failed (auth broken, tox venv gone, etc.) | high |
 | `halt` | Kill switch engaged (`state/.halt` written) | high |
-| `daily_summary` | Every clean run, one-line metrics | low |
 | `host_lock_mismatch` | `config.security.enforce_host_lock` tripped | high |
 
-Filter by adding only the events you want to `notify.events[]`. Defaults to all.
+**Milestones (per-action progress, default on — gives live visibility for manual runs):**
+
+| Event | Fires when | Priority | Typical count/run |
+|---|---|---|---|
+| `commit_pushed` | bug-fix-implementer pushed to a fork branch | default | 0–N |
+| `fork_created` | fork-sync-checker created a new fork for a managed role | default | 0–5 |
+| `enable_role_complete` | `new-role-enabler` returned a verdict (success or failure) | default / high | 0–1 |
+| `human_action_needed` | `state/PENDING_REVIEW.md` gained a `manual_triage` item | high | 0–1 |
+
+**Heartbeat (default on — useful for "is it still running?"):**
+
+| Event | Fires when | Priority |
+|---|---|---|
+| `run_started` | After acquiring run lock (Phase 0 end) | low |
+| `run_completed` | Full nightly path finished cleanly (Phase 5 end) | low |
+
+**Summaries (1× per run):**
+
+| Event | Fires when | Priority |
+|---|---|---|
+| `daily_summary` | Every clean run, one-line metrics | low |
+| `fork_sync_summary` | End of Phase 2: batched fork-sync results | low / default |
+
+**Typical night**: 5–10 pings (1 `run_started`, 1–5 fork events, 0–N `commit_pushed`, 1 `fork_sync_summary`, 1 `run_completed`, plus any critical events). Filter by editing `config.notify.events` — remove a kind to silence it. To minimize noise: keep only `reject`, `human_action_needed`, `halt`, `anomaly` and you'll only hear from the agent when something needs you.
 
 ## Why opt-in?
 
